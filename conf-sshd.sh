@@ -8,8 +8,13 @@ sshkey_url="{{ SSH_KEY_URL }}"
 default_cron="{{ DEFAULT_CRON }}"
 # 脚本 Url
 script_url="{{ SCRIPT_URL }}"
-# 日志文件
+# 日志文件路径
 log_file="$HOME/.conf-sshd/conf-sshd.log"
+
+# 创建日志目录
+mkdir -p "$HOME/.conf-sshd"
+
+############ 日志函数 ##########
 
 log() {
     echo "$(date '+%Y-%m-%d %H:%M:%S') - $1" | tee -a $log_file
@@ -24,7 +29,7 @@ log_error() {
 script_params=$*
 has_param() {
     for param in $script_params; do
-        for tParam in "$@"; do
+        for tParam in $@; do
             if [ "$tParam" == "$param" ]; then
                 echo "true"
                 return
@@ -41,10 +46,10 @@ get_param_value() {
             if [[ $param == -* ]]; then
                 return
             fi
-            echo "$param"
+            echo $param
             return
         fi
-        for tParam in "$@"; do
+        for tParam in $@; do
             if [ "$tParam" == "$param" ]; then
                 find=true
                 break
@@ -75,23 +80,26 @@ if [ $(has_param "-h" "--help") == "true" ]; then
 fi
 
 update_sshkeys() {
-    if [ -z "$sshkey_url" ]; then
-        log_error "SSH public key URL is not specified."
+    if [ "$sshkey_url" == "" ]; then
+        log_error "Please specify the URL of the SSH public key."
         exit 1
     fi
     log "Downloading SSH public key from '$sshkey_url'"
     mkdir -p ~/.ssh
     local ssh_keys=$(curl -s $sshkey_url)
-    if [ $? -ne 0 ] || [ -z "$ssh_keys" ]; then
-        log_error "Failed to download SSH public key."
+    if [ $? -ne 0 ] || [ "$ssh_keys" == "" ]; then
+        log_error "Failed to download SSH public key"
         exit 1
     fi
+    log "-------------------- SSH Keys --------------------"
+    log "$ssh_keys"
+    log "--------------------------------------------------"
     echo "$ssh_keys" > ~/.ssh/authorized_keys
     chmod 600 ~/.ssh/authorized_keys
     log "SSH public key updated successfully."
 }
 
-# 检查是否只更新密钥.
+# 检查是否只更新密钥
 if [ $(has_param "-o" "--only-update-keys") == "true" ]; then
     update_sshkeys
     exit 0
@@ -100,21 +108,15 @@ fi
 # 检查是否指定了 --update-self
 if [ $(has_param "-u" "--update-self") == "true" ]; then
     log "Updating conf-sshd script..."
-    tmp_file=$(mktemp)
-    if curl -s $script_url -o "$tmp_file"; then
-        mv "$tmp_file" "$0"
-        chmod +x "$0"
-        log "Script updated successfully."
-    else
-        log_error "Script update failed."
-        rm -f "$tmp_file"
-        exit 1
-    fi
+    cp $0 "$HOME/.conf-sshd/conf-sshd.sh.bak"
+    curl -s $script_url > $0 || cp "$HOME/.conf-sshd/conf-sshd.sh.bak" $0 && log_error "Script update failed" && exit 1
+    chmod +x "$HOME/.conf-sshd/conf-sshd.sh"
+    log "Script updated successfully."
     exit 0
 fi
 
 # 检查 /usr/sbin/sshd 是否存在，且 /usr/sbin/sshd 执行后退出代码为 0
-/usr/sbin/sshd -T > /dev/null 2>&1
+/usr/sbin/sshd -T > /dev/null
 if [ $? -ne 0 ] && [ $(has_param "-n" "--no-install-sshd") == "false" ]; then
     if [ $(id -u) -eq 0 ]; then
         log "The ssh server is not installed, and the script is executed as root, so it will be installed."
@@ -194,21 +196,21 @@ if [ $(has_param "-c" "--cron") == "true" ]; then
     else
         [ -z "$cron" ] && cron=$default_cron
         # 将当前脚本移动到 ~/.conf-sshd/conf-sshd.sh 中
-        mkdir -p ~/.conf-sshd
+        mkdir -p "$HOME/.conf-sshd"
         if [ ! -f $0 ]; then
             log "Downloading conf-sshd script..."
-            curl -o ~/.conf-sshd/conf-sshd.sh $script_url
+            curl -o "$HOME/.conf-sshd/conf-sshd.sh" $script_url
         else 
             log "Copying conf-sshd script..."
-            cp $0 ~/.conf-sshd/conf-sshd.sh
+            cp $0 "$HOME/.conf-sshd/conf-sshd.sh"
         fi
-        chmod +x ~/.conf-sshd/conf-sshd.sh
+        chmod +x "$HOME/.conf-sshd/conf-sshd.sh"
         log "Install conf-sshd script successfully."
         # 将当前脚本追加到当前用户的 Crontab 中
-        crontab -l > ~/.conf-sshd/crontab.old
-        echo "$cron /bin/bash ~/.conf-sshd/conf-sshd.sh -o >> ~/.conf-sshd/run.log 2>&1" >> ~/.conf-sshd/crontab.old
-        crontab ~/.conf-sshd/crontab.old
-        rm ~/.conf-sshd/crontab.old
+        crontab -l > "$HOME/.conf-sshd/crontab.old"
+        echo "$cron \"/bin/bash $HOME/.conf-sshd/conf-sshd.sh -o\" >> $HOME/.conf-sshd/run.log" >> "$HOME/.conf-sshd/crontab.old"
+        crontab "$HOME/.conf-sshd/crontab.old"
+        rm "$HOME/.conf-sshd/crontab.old"
         log "Crontab has been configured. (Cron: '$cron')"
     fi
 fi
