@@ -8,13 +8,23 @@ sshkey_url="{{ SSH_KEY_URL }}"
 default_cron="{{ DEFAULT_CRON }}"
 # 脚本 Url
 script_url="{{ SCRIPT_URL }}"
+# 日志文件
+log_file="$HOME/.conf-sshd/conf-sshd.log"
+
+log() {
+    echo "$(date '+%Y-%m-%d %H:%M:%S') - $1" | tee -a $log_file
+}
+
+log_error() {
+    echo "$(date '+%Y-%m-%d %H:%M:%S') - ERROR: $1" | tee -a $log_file >&2
+}
 
 ############ 脚本区 ##########
 
 script_params=$*
 has_param() {
     for param in $script_params; do
-        for tParam in $@; do
+        for tParam in "$@"; do
             if [ "$tParam" == "$param" ]; then
                 echo "true"
                 return
@@ -31,10 +41,10 @@ get_param_value() {
             if [[ $param == -* ]]; then
                 return
             fi
-            echo $param
+            echo "$param"
             return
         fi
-        for tParam in $@; do
+        for tParam in "$@"; do
             if [ "$tParam" == "$param" ]; then
                 find=true
                 break
@@ -43,7 +53,7 @@ get_param_value() {
     done
 }
 
-# 帮助信息.
+# 帮助信息
 if [ $(has_param "-h" "--help") == "true" ]; then
     echo "Usage: $0 [options]"
     echo "Options:"
@@ -65,24 +75,20 @@ if [ $(has_param "-h" "--help") == "true" ]; then
 fi
 
 update_sshkeys() {
-    if [ "$sshkey_url" == "" ]; then
-        echo "Please specify the URL of the SSH public key."
+    if [ -z "$sshkey_url" ]; then
+        log_error "SSH public key URL is not specified."
         exit 1
     fi
-    echo "Downloading SSH public key from '$sshkey_url'"
+    log "Downloading SSH public key from '$sshkey_url'"
     mkdir -p ~/.ssh
     local ssh_keys=$(curl -s $sshkey_url)
-    if [ $? -ne 0 ] || [ "$ssh_keys" == "" ]; then
-        echo "Failed to download SSH public key at $(date '+%Y-%m-%d %H:%M:%S')"
+    if [ $? -ne 0 ] || [ -z "$ssh_keys" ]; then
+        log_error "Failed to download SSH public key."
         exit 1
     fi
-    echo "-------------------- SSH Keys --------------------"
-    echo "$ssh_keys"
-    echo "--------------------------------------------------"
     echo "$ssh_keys" > ~/.ssh/authorized_keys
     chmod 600 ~/.ssh/authorized_keys
-    # 输出更新成功，需要附带时间日期
-    echo "SSH public key updated successfully at $(date '+%Y-%m-%d %H:%M:%S')"
+    log "SSH public key updated successfully."
 }
 
 # 检查是否只更新密钥.
@@ -93,32 +99,38 @@ fi
 
 # 检查是否指定了 --update-self
 if [ $(has_param "-u" "--update-self") == "true" ]; then
-    echo "Updating conf-sshd script..."
-    cp $0 ~/.conf-sshd/conf-sshd.sh.bak
-    curl -s $script_url > $0 || cp ~/.conf-sshd/conf-sshd.sh.bak $0 && echo "Script update failed at $(date '+%Y-%m-%d %H:%M:%S')" && exit 1
-    chmod +x ~/.conf-sshd/conf-sshd.sh
-    echo "Script updated successfully at $(date '+%Y-%m-%d %H:%M:%S')"
+    log "Updating conf-sshd script..."
+    tmp_file=$(mktemp)
+    if curl -s $script_url -o "$tmp_file"; then
+        mv "$tmp_file" "$0"
+        chmod +x "$0"
+        log "Script updated successfully."
+    else
+        log_error "Script update failed."
+        rm -f "$tmp_file"
+        exit 1
+    fi
     exit 0
 fi
 
 # 检查 /usr/sbin/sshd 是否存在，且 /usr/sbin/sshd 执行后退出代码为 0
-/usr/sbin/sshd -T > /dev/null
+/usr/sbin/sshd -T > /dev/null 2>&1
 if [ $? -ne 0 ] && [ $(has_param "-n" "--no-install-sshd") == "false" ]; then
     if [ $(id -u) -eq 0 ]; then
-        echo "The ssh server is not installed, and the script is executed as root, so it will be installed."
+        log "The ssh server is not installed, and the script is executed as root, so it will be installed."
         if [ -f /etc/redhat-release ]; then
             yum install -y openssh-server
         elif [ -f /etc/debian_version ]; then
             apt-get update
             apt-get install -y openssh-server
         fi
-        echo "The ssh server has been installed."
+        log "The ssh server has been installed."
     else
-        echo "The ssh server is not installed, but the script is executed as a non-root user and cannot be installed."
+        log_error "The ssh server is not installed, but the script is executed as a non-root user and cannot be installed."
         exit 1
     fi
 else
-    echo "The ssh server is already installed."
+    log "The ssh server is already installed."
 fi
 
 # 检查是否指定了 --allow-root-passwd
@@ -130,76 +142,73 @@ if [ $(has_param "-p" "--allow-root-passwd") == "true" ]; then
         if [ "$allow_root_passwd" == "yes" ]; then
             # 设置允许 root 使用密码登录
             sed -i 's/^#?PermitRootLogin.*/PermitRootLogin yes/g' /etc/ssh/sshd_config
-            echo "Root user is allowed to log in with password."
+            log "Root user is allowed to log in with password."
         elif [ "$allow_root_passwd" == "no" ]; then
             # 设置禁止 root 使用密码登录
             sed -i 's/^#?PermitRootLogin.*/PermitRootLogin prohibit-password/g' /etc/ssh/sshd_config
-            echo "Root user is prohibited from logging in with password."
+            log "Root user is prohibited from logging in with password."
         else
-            echo "Please specify whether to allow root to log in with a password."
+            log_error "Please specify whether to allow root to log in with a password."
             exit 1
         fi
     else
-        echo "The script is executed as a non-root user and cannot set whether to allow root to log in with a password."
+        log_error "The script is executed as a non-root user and cannot set whether to allow root to log in with a password."
         exit 1
     fi
 fi
 
-# 更新密钥.
+# 更新密钥
 update_sshkeys
 
 # 检查是否指定了 --cron
 if [ $(has_param "-c" "--cron") == "true" ]; then
     # 检查 Crontab 是否已安装
-    if [ "$(command -v crontab)" == "" ]; then
+    if [ -z "$(command -v crontab)" ]; then
         if [ $(id -u) -eq 0 ]; then
-            echo "The crontab is not installed, and the script is executed as a root user, so it will be installed."
+            log "The crontab is not installed, and the script is executed as a root user, so it will be installed."
             if [ -f /etc/redhat-release ]; then
                 yum install -y crontabs
             elif [ -f /etc/debian_version ]; then
                 apt-get update
                 apt-get install -y cron
             fi
-            echo "The crontab has been installed."
+            log "The crontab has been installed."
         else
-            echo "The crontab is not installed, but the script is executed as a non-root user and cannot be installed."
+            log_error "The crontab is not installed, but the script is executed as a non-root user and cannot be installed."
             exit 1
         fi
     else
-        echo "The crontab is already installed."
+        log "The crontab is already installed."
     fi
     cron=$(get_param_value "-c" "--cron" | tr '[:upper:]' '[:lower:]')
     if [ "$cron" == "false" ]; then
         # 检查 Crontab 是否已经设置
-        if [ "$(crontab -l | grep "conf-sshd.sh")" == "" ]; then
-            echo "Crontab will not be configured."
+        if [ -z "$(crontab -l | grep "conf-sshd.sh")" ]; then
+            log "Crontab will not be configured."
             exit 0
         else
             crontab -l | grep -v "conf-sshd.sh" | crontab -
-            echo "Crontab has been removed."
+            log "Crontab has been removed."
             exit 0
         fi
     else
-        if [ "$cron" == "" ]; then
-            cron=$default_cron
-        fi
-        # 将当前脚本移动到 ~/.conf-sshd/conf-sshd.sh 中.
+        [ -z "$cron" ] && cron=$default_cron
+        # 将当前脚本移动到 ~/.conf-sshd/conf-sshd.sh 中
         mkdir -p ~/.conf-sshd
-        # 检查当前脚本是否为文件
         if [ ! -f $0 ]; then
-            echo "Downloading conf-sshd script..."
+            log "Downloading conf-sshd script..."
             curl -o ~/.conf-sshd/conf-sshd.sh $script_url
         else 
-            echo "Copying conf-sshd script..."
+            log "Copying conf-sshd script..."
             cp $0 ~/.conf-sshd/conf-sshd.sh
         fi
         chmod +x ~/.conf-sshd/conf-sshd.sh
-        echo "Install conf-sshd script successfully."
+        log "Install conf-sshd script successfully."
         # 将当前脚本追加到当前用户的 Crontab 中
         crontab -l > ~/.conf-sshd/crontab.old
-        echo "$cron \"/bin/bash ~/.conf-sshd/conf-sshd.sh -o\" >> ~/.conf-sshd/run.log" >> ~/.conf-sshd/crontab.old
+        echo "$cron /bin/bash ~/.conf-sshd/conf-sshd.sh -o >> ~/.conf-sshd/run.log 2>&1" >> ~/.conf-sshd/crontab.old
         crontab ~/.conf-sshd/crontab.old
         rm ~/.conf-sshd/crontab.old
-        echo "Crontab has been configured.(Cron: '$cron')"
+        log "Crontab has been configured. (Cron: '$cron')"
     fi
 fi
