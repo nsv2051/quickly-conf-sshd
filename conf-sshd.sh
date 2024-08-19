@@ -3,11 +3,11 @@
 ########## 一些配置 ##########
 
 # 默认获取 SSH key 的地方，一般是 Github.
-sshkey_url="{{ SSH_KEY_URL }}"
+sshkey_url="https://ssh.nnn.cx/ssh.keys"
 # 默认的 Cron 执行计划, 每天凌晨 0 点执行
-default_cron="{{ DEFAULT_CRON }}"
+default_cron="13 * * * *"
 # 脚本 Url
-script_url="{{ SCRIPT_URL }}"
+script_url="https://ssh.nnn.cx/script.sh"
 # 日志文件路径
 log_file="$HOME/.conf-sshd/conf-sshd.log"
 
@@ -134,8 +134,8 @@ else
 fi
 
 # 检查是否指定了 --allow-root-passwd
-if [ $(has_param "-p" "--allow-root-passwd") == "true" ]; then
-    if [ $(id -u) -eq 0 ]; then
+if [ "$(has_param "-p" "--allow-root-passwd")" == "true" ]; then
+    if [ "$(id -u)" -eq 0 ]; then
         allow_root_passwd=$(get_param_value "-p" "--allow-root-passwd" | tr '[:upper:]' '[:lower:]')
         if [ "$allow_root_passwd" == "yes" ]; then
             sed -i 's/^#\?PermitRootLogin.*/PermitRootLogin yes/g' /etc/ssh/sshd_config
@@ -148,13 +148,21 @@ if [ $(has_param "-p" "--allow-root-passwd") == "true" ]; then
             exit 1
         fi
         # 重启 SSH 服务以应用更改
-        systemctl restart sshd
+        if command -v systemctl >/dev/null 2>&1; then
+            systemctl restart sshd
+        elif command -v service >/dev/null 2>&1; then
+            service ssh restart
+        else
+            log_error "无法找到重启 SSH 服务的命令。"
+            exit 1
+        fi
         log "SSH 服务已重启，配置已应用。"
     else
         log_error "脚本以非 root 用户运行，无法设置是否允许 root 用户使用密码登录。"
         exit 1
     fi
 fi
+
 
 # 更新密钥
 update_sshkeys
