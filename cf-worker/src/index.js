@@ -35,7 +35,8 @@ async function sendScriptContent(baseUrl) {
 
     return new Response(scriptContent, {
       headers: {
-        "content-type": "text/plain; charset=utf-8"
+        "content-type": "text/plain; charset=utf-8",
+        "cache-control": "no-store"
       }
     });
   } else {
@@ -43,7 +44,8 @@ async function sendScriptContent(baseUrl) {
       status: 500,
       statusText: "Failed to get install script",
       headers: {
-        "content-type": "text/plain; charset=utf-8"
+        "content-type": "text/plain; charset=utf-8",
+        "cache-control": "no-store"
       }
     });
   }
@@ -60,7 +62,8 @@ export default {
           let keys = await response.text()
           return new Response(keys, {
             headers: {
-              "content-type": "text/plain; charset=utf-8"
+              "content-type": "text/plain; charset=utf-8",
+              "cache-control": "no-store"
             }
           });
         }
@@ -68,7 +71,8 @@ export default {
       if (backupSshKeys.length > 0) {
         return new Response(backupSshKeys, {
           headers: {
-            "content-type": "text/plain; charset=utf-8"
+            "content-type": "text/plain; charset=utf-8",
+            "cache-control": "no-store"
           }
         });
       } else {
@@ -76,7 +80,8 @@ export default {
           status: 500,
           statusText: "Failed to get keys",
           headers: {
-            "content-type": "text/plain; charset=utf-8"
+            "content-type": "text/plain; charset=utf-8",
+            "cache-control": "no-store"
           }
         });
       }

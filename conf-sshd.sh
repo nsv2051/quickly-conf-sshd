@@ -63,10 +63,23 @@ if [ "$(has_param "-h" "--help")" == "true" ]; then
     echo ""
     echo "only available when the script is executed as root:"
     echo "  -n, --no-install-sshd             Do not install SSH Server."
-    echo "  -p, --allow-root-passwd <yes | no>  Allow Root to log in with a password."
+    echo "  -p, --allow-root-passwd <yes | no>  Allow Root to log in with a password (只改 PermitRootLogin, 不影响 PasswordAuthentication)."
+    echo "  -P, --disable-password-auth <yes | no>  Disable password authentication entirely (仅密钥登录; 写 sshd_config.d drop-in 并 reload sshd)."
     echo ""
     exit 0
 fi
+
+# reload sshd (reload 不会断开现有连接, 比 restart 安全)
+reload_sshd() {
+    if systemctl reload ssh 2>/dev/null; then return 0; fi
+    if systemctl reload sshd 2>/dev/null; then return 0; fi
+    if command -v service >/dev/null 2>&1; then
+        if service ssh reload 2>/dev/null; then return 0; fi
+        if service sshd reload 2>/dev/null; then return 0; fi
+    fi
+    echo "WARNING: 无法自动 reload sshd, 请手动执行: systemctl restart ssh"
+    return 0
+}
 
 update_sshkeys() {
     if [ "$sshkey_url" == "" ] || [[ "$sshkey_url" == "{{"* ]]; then
@@ -79,14 +92,22 @@ update_sshkeys() {
     chmod 700 ~/.ssh
 
     local dl_tmp_file=~/.ssh/authorized_keys.dl.tmp
-    if ! curl -sL "$sshkey_url" -o "$dl_tmp_file"; then 
+    if ! curl -fsSL --retry 3 --connect-timeout 10 --max-time 60 "$sshkey_url" -o "$dl_tmp_file"; then
         echo "Failed to download SSH public key at $(date '+%Y-%m-%d %H:%M:%S')"
         rm -f "$dl_tmp_file"
         exit 1
     fi
 
-    if [ ! -s "$dl_tmp_file" ] || ! grep -qE "(ssh-rsa|ssh-ed25519|ecdsa-sha2-nistp)" "$dl_tmp_file"; then
-        echo "Downloaded file is empty or does not contain valid SSH key types at $(date '+%Y-m-d %H:%M:%S')"
+    if [ ! -s "$dl_tmp_file" ] || ! grep -qE '^(ssh-rsa|ssh-ed25519|ecdsa-sha2-nistp|sk-ssh-ed25519|sk-ecdsa-sha2-nistp)' "$dl_tmp_file"; then
+        echo "Downloaded file is empty or does not contain valid SSH key types at $(date '+%Y-%m-%d %H:%M:%S')"
+        echo "Aborting update to prevent lockout."
+        rm -f "$dl_tmp_file"
+        exit 1
+    fi
+
+    # 复核: 每一行都必须能被 ssh-keygen 解析, 防止 HTML/文档页骗过上面的类型匹配
+    if ! ssh-keygen -lf "$dl_tmp_file" >/dev/null 2>&1; then
+        echo "Downloaded content is not a parseable public key list at $(date '+%Y-%m-%d %H:%M:%S')"
         echo "Aborting update to prevent lockout."
         rm -f "$dl_tmp_file"
         exit 1
@@ -105,6 +126,19 @@ update_sshkeys() {
 
     local managed_block_found=false
     local inside_managed_block=false
+
+    # 安全护栏: 旧逻辑在"有 BEGIN 却缺 END"时会把 BEGIN 之后到文件末尾的内容全部丢弃
+    if grep -qF "$begin_marker" "$auth_file"; then
+        if ! awk -v bm="$begin_marker" -v em="$end_marker" '
+                index($0, bm) { seen = 1 }
+                seen && index($0, em) { ok = 1 }
+                END { exit (ok ? 0 : 1) }
+            ' "$auth_file"; then
+            echo "ERROR: 受管块有 BEGIN 标记但缺少 END 标记, 为避免丢失文件其余内容, 本次跳过更新."
+            rm -f "$dl_tmp_file"
+            exit 1
+        fi
+    fi
 
     touch "$auth_file"
     true > "$new_auth_file"
@@ -140,6 +174,11 @@ update_sshkeys() {
             cat "$dl_tmp_file"
             echo "$end_marker"
         } >> "$new_auth_file"
+    fi
+
+    # 覆盖前备份, 便于事后比对/回滚
+    if [ -s "$auth_file" ]; then
+        cp -a "$auth_file" "$auth_file.bak"
     fi
 
     mv "$new_auth_file" "$auth_file"
@@ -242,16 +281,92 @@ if [ "$(has_param "-p" "--allow-root-passwd")" == "true" ]; then
             exit 1
         fi
 
-        if grep -qE '^#?PermitRootLogin' "$sshd_config_file"; then
-            sed -i "s@^#?PermitRootLogin.*@$new_sshd_permit_root_login_setting@g" "$sshd_config_file"
-        else
-            echo "$new_sshd_permit_root_login_setting" >> "$sshd_config_file"
+        cp -a "$sshd_config_file" "$sshd_config_file.bak.conf-sshd" 2>/dev/null || true
+
+        # 用 awk 重写首个匹配行; 若无匹配行则追加 (不依赖 sed 的方言与 -i 语义)
+        awk -v val="$new_sshd_permit_root_login_setting" '
+            /^[[:space:]]*#?[[:space:]]*PermitRootLogin/ && done == 0 { print val; done = 1; next }
+            { print }
+            END { if (done == 0) print val }
+        ' "$sshd_config_file" > "$sshd_config_file.conf-sshd.new"
+
+        if [ ! -s "$sshd_config_file.conf-sshd.new" ]; then
+            echo "ERROR: 生成新配置失败, 原文件保持不变."
+            rm -f "$sshd_config_file.conf-sshd.new"
+            exit 1
         fi
-        echo "SSHD config updated. Please restart sshd service to apply changes."
+
+        chmod --reference="$sshd_config_file" "$sshd_config_file.conf-sshd.new" 2>/dev/null || true
+        mv "$sshd_config_file.conf-sshd.new" "$sshd_config_file"
+
+        if ! grep -qF "$new_sshd_permit_root_login_setting" "$sshd_config_file"; then
+            echo "ERROR: 未能写入 '$new_sshd_permit_root_login_setting', 已回滚."
+            cp -a "$sshd_config_file.bak.conf-sshd" "$sshd_config_file"
+            exit 1
+        fi
+
+        if sshd -t >/dev/null 2>&1; then
+            reload_sshd
+            echo "SSHD config updated and applied (sshd reloaded)."
+        else
+            echo "ERROR: 'sshd -t' 校验失败, 已回滚 $sshd_config_file"
+            cp -a "$sshd_config_file.bak.conf-sshd" "$sshd_config_file"
+            exit 1
+        fi
 
     else
-        echo "The script is executed as a non-root user and cannot set whether to allow root to log in with a password."
-        exit 1
+        echo "WARNING: 非 root 用户无法设置 root 的密码登录方式, 已跳过该步骤."
+    fi
+fi
+
+# 检查是否指定了 --disable-password-auth (关闭密码认证, 仅允许密钥登录)
+if [ "$(has_param "-P" "--disable-password-auth")" == "true" ]; then
+    if [ "$(id -u)" -eq 0 ]; then
+        dp_arg=$(get_param_value "-P" "--disable-password-auth" | tr '[:upper:]' '[:lower:]')
+
+        if [ "$dp_arg" == "yes" ]; then
+            pa_val="no"
+        elif [ "$dp_arg" == "no" ]; then
+            pa_val="yes"
+        else
+            echo "Please specify 'yes' or 'no' for --disable-password-auth."
+            exit 1
+        fi
+
+        sshd_dropin_dir="/etc/ssh/sshd_config.d"
+        sshd_dropin_file="$sshd_dropin_dir/50-disable-password.conf"
+        mkdir -p "$sshd_dropin_dir"
+        if [ -f "$sshd_dropin_file" ]; then
+            cp -a "$sshd_dropin_file" "$sshd_dropin_file.bak.conf-sshd"
+        fi
+
+        {
+            echo "# Managed by conf-sshd.sh --disable-password-auth"
+            echo "PasswordAuthentication $pa_val"
+            echo "KbdInteractiveAuthentication $pa_val"
+            echo "ChallengeResponseAuthentication $pa_val"
+            echo "PermitEmptyPasswords no"
+        } > "$sshd_dropin_file"
+
+        if ! grep -qF "PasswordAuthentication $pa_val" "$sshd_dropin_file"; then
+            echo "ERROR: drop-in 写入校验失败, 已撤销 $sshd_dropin_file"
+            rm -f "$sshd_dropin_file"
+            exit 1
+        fi
+
+        if sshd -t >/dev/null 2>&1; then
+            reload_sshd
+            echo "PasswordAuthentication=$pa_val applied. (drop-in: $sshd_dropin_file)"
+            if [ "$pa_val" == "no" ]; then
+                echo "NOTE: 先确认已授权的密钥能登录, 再关闭当前会话, 否则将失去远程访问。"
+            fi
+        else
+            echo "ERROR: 'sshd -t' 校验失败, 已撤销 $sshd_dropin_file"
+            rm -f "$sshd_dropin_file"
+            exit 1
+        fi
+    else
+        echo "WARNING: 非 root 用户无法修改密码认证方式, 已跳过该步骤."
     fi
 fi
 
@@ -299,7 +414,7 @@ if [ "$(has_param "-c" "--cron")" == "true" ]; then
         if [ ! -f "$0" ]; then
             echo "Downloading conf-sshd script..."
             if ! curl -sL "$script_url" -o "$target_script.tmp"; then
-                 echo "Script download failed at $(date '+%Y-m-d %H:%M:%S')"
+                 echo "Script download failed at $(date '+%Y-%m-%d %H:%M:%S')"
                  rm -f "$target_script.tmp"
                  exit 1
             fi
