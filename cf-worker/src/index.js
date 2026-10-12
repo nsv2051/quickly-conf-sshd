@@ -87,7 +87,7 @@ export default {
       }
     } else if (pathname === "/") {
       const userAgent = request.headers.get("User-Agent");
-      if (userAgent != null && userAgent.match(/curl|libcurl/) !== null) {
+      if (userAgent != null && userAgent.match(/curl|libcurl|wget/i) !== null) {
         return await sendScriptContent(baseUrl);
       } else {
         return new Response("", {
