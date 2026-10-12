@@ -23,12 +23,42 @@ curl -s https://ssh.nnn.cx | bash -s -- -o
 ```bash
 curl -s https://ssh.nnn.cx | bash -s -- -p yes
 ```
+添加 `-P yes` 参数可以关闭密码登录，改为仅允许密钥登录（需使用 Root 用户执行脚本）：
+```bash
+curl -s https://ssh.nnn.cx | bash -s -- -P yes
+```
+> 执行前请先用密钥开一个新会话验证能登录，否则会失去远程访问；脚本会自动备份、校验并 reload sshd（不会断开现有连接）。
+
 要查看脚本的帮助信息，请使用 `-h` 参数：
 ```bash
 curl -s https://ssh.nnn.cx | bash -s -- -h
 ```
 
 > Note: 更多用法请参见脚本帮助信息~
+
+## 参数说明
+
+使用 `bash -s -- <参数>` 传入参数（示例见上一节）：
+
+| 参数 | 说明 |
+| --- | --- |
+| `-c [<cron>]` / `--cron` | 配置 Crontab 定期自动更新公钥；`-c false` 则删除 Crontab |
+| `-o` / `--only-update-keys` | 只更新公钥，不检查 / 改动 SSH Server 配置 |
+| `-u` / `--update-self` | 将本地脚本更新到最新版本 |
+| `-n` / `--no-install-sshd` | 不安装 SSH Server（仅 Root） |
+| `-p <yes \| no>` / `--allow-root-passwd` | 是否允许 Root 用**密码**登录。注意：**只写入 `PermitRootLogin`，不会改变密码认证本身**（仅 Root） |
+| `-P <yes \| no>` / `--disable-password-auth` | **关闭 / 开启密码登录**（`-P yes` 即仅允许密钥登录）：写入 `/etc/ssh/sshd_config.d/50-disable-password.conf` 并 reload sshd（仅 Root） |
+| `--uninstall` | 卸载：移除 Crontab 与本地脚本文件（不改动 `authorized_keys` 受管块与 `sshd_config`） |
+| `-h` / `--help` | 显示帮助信息 |
+
+注意事项：
+
+- 改动 `sshd_config` 前自动备份为 `.bak.conf-sshd`；改动后执行 `sshd -t` 校验，失败自动回滚；成功后 `reload` sshd，无需手动重启，也不会断开现有连接。
+- 使用 `-P yes` 之前，请先用密钥开一个新会话确认可以登录，否则关闭密码登录后将失去远程访问。
+- 公钥写入 `~/.ssh/authorized_keys` 的受管块（`# --- BEGIN/END MANAGED BY CONF-SSHD SCRIPT ---`），块外的自定义内容会保留；覆盖前生成 `authorized_keys.bak` 备份。
+- 受管块若缺少 `END` 标记，脚本会拒绝更新（避免误删块外内容）。
+- 公钥取自 `https://{Worker 地址}/ssh.keys`，默认来自你 GitHub 账号下的 SSH 公钥。请留意：**谁能改动该地址或你的 GitHub 账号，谁就能登录所有执行过本脚本的服务器**；不需要自动更新时可用 `--uninstall` 断开。
+- 仓库与 Worker 中**只放公钥**，不要提交私钥。
 
 ## Paths
 获取 SSH 公钥：
@@ -41,7 +71,7 @@ https://ssh.nnn.cx/ssh.keys
 https://ssh.nnn.cx/script.sh
 ```
 
-获取 Shell 脚本（使用 Curl 访问）：
+获取 Shell 脚本（使用 Curl / Wget 访问）：
 ```
 https://ssh.nnn.cx/
 ```
@@ -67,6 +97,9 @@ const defaultBaseUrl = "";
 // Cron 表达式, 默认 1 天执行一次更新.
 const cronExpression = "0 0 * * *";
 ```
+
+> ⚠️ `githubUserName` 必须改成**你自己的** GitHub 用户名：它决定 Worker 向服务器分发谁的公钥。
+> 若沿用默认值，等于把上游作者的公钥装进你的服务器，对方即可登录。
 
 ### Use Wrangler
 如果你安装了 Cloudflare 的 Wrangler，可以直接在 `cf-worker` 目录中执行：
