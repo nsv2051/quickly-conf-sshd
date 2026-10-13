@@ -81,6 +81,31 @@ https://ssh.nnn.cx/
 https://ssh.nnn.cx/
 ```
 
+## 环境变量
+Worker 支持通过环境变量覆盖内置配置，**不设置任何变量时使用代码内置默认值，Worker 照常工作**（环境变量优先，默认值兜底）。
+
+设置位置：**Cloudflare 面板 → 该 Worker → Settings → Variables and Secrets**。
+
+| 变量名 | 作用 | 默认值 |
+| --- | --- | --- |
+| `GITHUB_USER_NAME` | 分发谁的 GitHub 公钥（决定 `/ssh.keys` 取源） | `nsv2051` |
+| `REPO_NAME` | 仓库名，用于推导 Pages 脚本地址与仓库链接 | `quickly-conf-sshd` |
+| `DEFAULT_BASE_URL` | 固定脚本里写死的访问地址；留空则用请求的 Host | 空 |
+| `CRON_EXPRESSION` | 脚本中 `-c` 的默认 cron 计划 | `0 0 * * *` |
+| `BACKUP_SSH_KEYS` | 备用 SSH 公钥（多行文本原样使用） | 空 |
+| `SSH_KEY_URLS` | 公钥来源地址列表（换行或英文逗号分隔）；留空则用 `https://github.com/<GITHUB_USER_NAME>.keys` | 空 |
+| `INSTALL_SCRIPT_URL` | 安装脚本源地址；留空则推导为 `https://<github用户名小写>.github.io/<REPO_NAME>/conf-sshd.sh` | 空 |
+| `LANDING_CONFIG` | 落地页文案覆盖项（JSON，与内置默认值浅合并；解析失败自动忽略） | 空 |
+
+两类变量：
+
+- **Variables**：用于文案 / 非敏感配置（如上表），写入后可编辑、但不可读取值；
+- **Secrets**：用于真正的密钥，写入后不可读回。
+
+代码里统一用 `env.<变量名>` 读取，两类变量的设置方式相同。
+
+例如，想换一个分发对象，把 `GITHUB_USER_NAME` 设为你的 GitHub 用户名即可。
+
 ## Install
 ### Configuration
 先 Fork 本仓库，Fork 后在仓库设置中启用 Github Pages，分支指向 main 分支，目录为仓库根目录。  

@@ -1,18 +1,31 @@
-// 改成你自己的 Github 用户名，注意是登录 Github 的那个用户名.
-const githubUserName = "nsv2051";
-// 改成你 Fork 后的仓库名，记得要开启 Github Pages 功能.
-const githubInstSshProjectName = "quickly-conf-sshd";
-// 如果可以，建议在此设置备用的 SSH 公钥, 以防 Github 无法使用.
-const backupSshKeys = ``;
-// Worker 的访问地址, 如果不填的话默认为请求的地址, 填了就会用这里的地址(要去 Worker 的触发器那绑定, 否则无效).
-const defaultBaseUrl = "";
-// Cron 表达式, 默认 1 天执行一次更新.
-const cronExpression = "0 0 * * *";
+// ============================================================
+// 内置默认配置：不设置任何环境变量时，Worker 使用下面的默认值照常工作。
+// 对应环境变量可在 Cloudflare 面板中覆盖，详见 README「环境变量」章节。
+// 规则：环境变量有值就用环境变量，否则用此处的默认值（环境变量优先）。
+// ============================================================
+const configDefaults = {
+  // 改成你自己的 Github 用户名，注意是登录 Github 的那个用户名.
+  GITHUB_USER_NAME: "nsv2051",
+  // 改成你 Fork 后的仓库名，记得要开启 Github Pages 功能.
+  REPO_NAME: "quickly-conf-sshd",
+  // Worker 的访问地址, 如果不填的话默认为请求的地址, 填了就会用这里的地址(要去 Worker 的触发器那绑定, 否则无效).
+  DEFAULT_BASE_URL: "",
+  // Cron 表达式, 默认 1 天执行一次更新.
+  CRON_EXPRESSION: "0 0 * * *",
+  // 如果可以，建议在此设置备用的 SSH 公钥, 以防 Github 无法使用（多行文本原样使用）.
+  BACKUP_SSH_KEYS: "",
+  // SSH 公钥地址列表，留空则使用 https://github.com/<GITHUB_USER_NAME>.keys；
+  // 非空时按换行或英文逗号切分为多个地址.
+  SSH_KEY_URLS: "",
+  // 安装脚本地址，留空则推导为 https://<github 用户名小写>.github.io/<REPO_NAME>/conf-sshd.sh.
+  INSTALL_SCRIPT_URL: "",
+};
 
 // ============================================================
-// 落地页配置区：浏览器访问 Worker 根路径时的所有文案 / 命令都在这里改。
+// 落地页默认配置：浏览器访问 Worker 根路径时的所有文案 / 命令都在这里改。
 // curl / wget 访问根路径依旧返回安装脚本，不受此处影响。
 // 文案中的 {{BASE_URL}} 会自动替换成当前 Worker 的访问地址。
+// 可通过 LANDING_CONFIG 环境变量（JSON）浅合并覆盖此处字段。
 // ============================================================
 const landing = {
   // 页面语言与元信息
@@ -25,7 +38,7 @@ const landing = {
   brandStatus: "服务正常",
   brandSub: "SSH 公钥一键部署",
   repoLabel: "GitHub",
-  repoUrl: `https://github.com/${githubUserName}/${githubInstSshProjectName}`,
+  repoUrl: `https://github.com/${configDefaults.GITHUB_USER_NAME}/${configDefaults.REPO_NAME}`,
 
   // 主标题与副标题
   headline: "一条命令，把 SSH 公钥部署到服务器",
@@ -101,13 +114,61 @@ const landing = {
 };
 
 // 下面的东西一般不用改.
-const baseRepoPageUrl = `https://${githubUserName.toLowerCase()}.github.io/${githubInstSshProjectName}/`;
-const installScriptUrl = `${baseRepoPageUrl}/conf-sshd.sh`;
-// 如果出现 Github 无法使用的情况, 可以修改 sshKeyUrl 来变更位置.
-// 也可以添加额外的 SSH 公钥地址(比如 KeyBase).
-const sshKeyUrls = [
-  `https://github.com/${githubUserName}.keys`
-];
+
+// 读取配置：环境变量有值就用环境变量，否则用上面的内置默认值。
+// 返回完整配置对象，供所有请求处理路径使用。
+function readConfig(env) {
+  env = env || {};
+
+  const githubUserName = env.GITHUB_USER_NAME || configDefaults.GITHUB_USER_NAME;
+  const repoName = env.REPO_NAME || configDefaults.REPO_NAME;
+  const defaultBaseUrl = env.DEFAULT_BASE_URL || configDefaults.DEFAULT_BASE_URL;
+  const cronExpression = env.CRON_EXPRESSION || configDefaults.CRON_EXPRESSION;
+  const backupSshKeys = env.BACKUP_SSH_KEYS || configDefaults.BACKUP_SSH_KEYS;
+
+  // SSH 公钥地址：留空用 GitHub，否则按换行或英文逗号切分并去掉空白项。
+  let sshKeyUrls;
+  if (env.SSH_KEY_URLS) {
+    sshKeyUrls = env.SSH_KEY_URLS
+      .split(/[\n,]/)
+      .map((s) => s.trim())
+      .filter((s) => s.length > 0);
+  } else {
+    sshKeyUrls = [`https://github.com/${githubUserName}.keys`];
+  }
+
+  // 安装脚本地址：留空则推导为 GitHub Pages 地址。
+  let installScriptUrl;
+  if (env.INSTALL_SCRIPT_URL) {
+    installScriptUrl = env.INSTALL_SCRIPT_URL;
+  } else {
+    installScriptUrl = `https://${githubUserName.toLowerCase()}.github.io/${repoName}/conf-sshd.sh`;
+  }
+
+  // 落地页配置：浅合并 LANDING_CONFIG（JSON）覆盖默认值；解析失败则用默认，绝不 500。
+  let landingConfig = { ...landing, repoUrl: `https://github.com/${githubUserName}/${repoName}` };
+  if (env.LANDING_CONFIG) {
+    try {
+      const override = JSON.parse(env.LANDING_CONFIG);
+      if (override && typeof override === "object" && !Array.isArray(override)) {
+        landingConfig = { ...landingConfig, ...override };
+      }
+    } catch (err) {
+      // 解析失败时保持默认配置。
+    }
+  }
+
+  return {
+    githubUserName,
+    repoName,
+    defaultBaseUrl,
+    cronExpression,
+    backupSshKeys,
+    sshKeyUrls,
+    installScriptUrl,
+    landing: landingConfig,
+  };
+}
 
 // 下面是脚本的占位符.
 const SCRIPT_PH_SSH_KEY_URL = "{{ SSH_KEY_URL }}"
@@ -115,14 +176,14 @@ const SCRIPT_PH_SCRIPT_URL = "{{ SCRIPT_URL }}"
 const SCRIPT_PH_DEFAULT_CRON = "{{ DEFAULT_CRON }}"
 
 
-async function sendScriptContent(baseUrl) {
-  let scriptResp = await fetch(new Request(installScriptUrl));
+async function sendScriptContent(baseUrl, config) {
+  let scriptResp = await fetch(new Request(config.installScriptUrl));
   if (scriptResp.ok) {
     let scriptContent = await scriptResp.text();
 
     scriptContent = scriptContent.replace(SCRIPT_PH_SSH_KEY_URL, `${baseUrl}/ssh.keys`)
                   .replace(SCRIPT_PH_SCRIPT_URL, `${baseUrl}/script.sh`)
-                  .replace(SCRIPT_PH_DEFAULT_CRON, cronExpression)
+                  .replace(SCRIPT_PH_DEFAULT_CRON, config.cronExpression)
 
     return new Response(scriptContent, {
       headers: {
@@ -148,7 +209,8 @@ function fillBaseUrl(text, baseUrl) {
 }
 
 // 由配置区生成落地页 HTML（结构固定，内容全部来自 landing）.
-function renderLandingPage(baseUrl) {
+function renderLandingPage(baseUrl, config) {
+  const landing = config.landing;
   const esc = (s) => String(s)
     .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;");
@@ -441,10 +503,11 @@ ${footer}
 
 export default {
   async fetch(request, env) {
+    const config = readConfig(env);
     const { pathname, host } = new URL(request.url);
-    const baseUrl = defaultBaseUrl || `https://${host}`;
+    const baseUrl = config.defaultBaseUrl || `https://${host}`;
     if (pathname === "/ssh.keys") {
-      for (let url of sshKeyUrls) {
+      for (let url of config.sshKeyUrls) {
         let response = await fetch(new Request(url));
         if (response.ok) {
           let keys = await response.text()
@@ -456,8 +519,8 @@ export default {
           });
         }
       }
-      if (backupSshKeys.length > 0) {
-        return new Response(backupSshKeys, {
+      if (config.backupSshKeys.length > 0) {
+        return new Response(config.backupSshKeys, {
           headers: {
             "content-type": "text/plain; charset=utf-8",
             "cache-control": "no-store"
@@ -476,9 +539,9 @@ export default {
     } else if (pathname === "/") {
       const userAgent = request.headers.get("User-Agent");
       if (userAgent != null && userAgent.match(/curl|libcurl|wget/i) !== null) {
-        return await sendScriptContent(baseUrl);
+        return await sendScriptContent(baseUrl, config);
       } else {
-        return new Response(renderLandingPage(baseUrl), {
+        return new Response(renderLandingPage(baseUrl, config), {
           headers: {
             "content-type": "text/html; charset=utf-8",
             "cache-control": "no-store"
@@ -486,7 +549,7 @@ export default {
         });
       }
     } else if (pathname === "/script.sh") {
-      return await sendScriptContent(baseUrl);
+      return await sendScriptContent(baseUrl, config);
     } else {
       return new Response("Not found.", {
         status: 404,
