@@ -1,37 +1,39 @@
 // ============================================================
-// 默认配置：不设置任何环境变量时，Worker 使用下面的默认值照常工作。
-// 可在 Cloudflare 面板 → 该 Worker → Settings → Variables and Secrets 覆盖。
-// 规则：环境变量有值就用环境变量，否则用此处的默认值。
+// 配置读取
+// 所有配置项均来自环境变量，在 Cloudflare 面板设置：
+//   该 Worker → Settings → Variables and Secrets
+// 本文件不含任何部署相关的硬编码值（唯一例外是下述通用 cron 兜底）。
 // ============================================================
-export const configDefaults = {
-  // 分发谁的 GitHub 公钥（决定 /ssh.keys 的取源），注意是登录 GitHub 的用户名。
-  GITHUB_USER_NAME: "nsv2051",
-  // 脚本中 -c 的默认 cron 计划。
-  CRON_EXPRESSION: "0 0 * * *",
-};
 
-// ------------------------------------------------------------
-// 备用通道（老板要求保留，不放进环境变量，改这里即可）：
-// ------------------------------------------------------------
-// 1) 备用公钥来源：GitHub 之外额外的公钥地址，主源拉取失败时按顺序尝试。
-export const extraSshKeyUrls = [];
-// 2) 内联备用公钥：所有来源都失败时直接返回这段文本（多行，原样输出）。
-export const backupSshKeys = ``;
-// 3) 脚本外部源：留空则使用仓库内置的 script/conf-sshd.sh；
-//    填了则优先从该地址拉取，拉取失败自动回落到内置脚本。
-export const installScriptUrlOverride = "";
+// 通用兜底：cron 计划（非身份信息，未设置 CRON_EXPRESSION 时使用）。
+const DEFAULT_CRON = "0 0 * * *";
 
-// 读取配置：环境变量优先，否则用上面的默认值。返回完整配置对象。
+// 读取配置：环境变量优先，返回完整配置对象。
 export function readConfig(env) {
   env = env || {};
-  const githubUserName = env.GITHUB_USER_NAME || configDefaults.GITHUB_USER_NAME;
-  const cronExpression = env.CRON_EXPRESSION || configDefaults.CRON_EXPRESSION;
+
+  // 必填：你的 GitHub 用户名，决定 /ssh.keys 分发谁的公钥。
+  const githubUserName = (env.GITHUB_USER_NAME || "").trim();
+
+  // 脚本中 -c 的默认 cron 计划。
+  const cronExpression = env.CRON_EXPRESSION || DEFAULT_CRON;
+
+  // 额外公钥来源：按换行或英文逗号切分，去掉空白项。
+  const extraKeyUrls = (env.SSH_KEY_URLS || "")
+    .split(/[\n,]/)
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0);
+
+  // 内联备用公钥：所有来源都失败时直接返回（多行原样）。
+  const backupSshKeys = env.BACKUP_SSH_KEYS || "";
+
   return {
     githubUserName,
     cronExpression,
-    // /ssh.keys 的来源：GitHub 账号公钥 + 额外备用来源
-    sshKeyUrls: [`https://github.com/${githubUserName}.keys`, ...extraSshKeyUrls],
+    // 公钥来源顺序：GitHub 账号公钥，其次额外来源。
+    sshKeyUrls: githubUserName
+      ? [`https://github.com/${githubUserName}.keys`, ...extraKeyUrls]
+      : extraKeyUrls,
     backupSshKeys,
-    installScriptUrlOverride,
   };
 }
