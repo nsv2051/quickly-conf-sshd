@@ -28,8 +28,8 @@ const landing = {
   repoUrl: `https://github.com/${githubUserName}/${githubInstSshProjectName}`,
 
   // 主标题与副标题
-  headline: "一条命令，把你的 SSH 公钥部署到服务器",
-  lede: `从你的 GitHub 账号同步公钥写入 \`authorized_keys\`，注册每小时自动更新，并在加固 sshd 前自动备份、校验、可回滚。零依赖，纯 shell。`,
+  headline: "一条命令，把 SSH 公钥部署到服务器",
+  lede: `不必手写 authorized_keys，也不用记 crontab。`,
 
   // 命令选择器：label 标签名，tag 角标（留空则显示，可写「推荐」），cmd 一键复制内容，hint 下方说明
   commandTabsLabel: "命令场景",
@@ -38,25 +38,25 @@ const landing = {
       label: "部署 + 自动更新",
       tag: "推荐",
       cmd: "curl -s {{BASE_URL}} | bash -s -- -c",
-      hint: "部署公钥并注册每小时自动更新。适合新服务器首次配置。"
+      hint: "部署公钥并注册自动更新。"
     },
     {
       label: "仅更新密钥",
       tag: "",
       cmd: "curl -s {{BASE_URL}} | bash -s -- -o",
-      hint: "只同步公钥，不检查也不改动 SSH Server 配置。"
+      hint: "只同步公钥，不改动 SSH 配置。"
     },
     {
       label: "仅密钥登录",
       tag: "",
       cmd: "curl -s {{BASE_URL}} | bash -s -- -P yes",
-      hint: "关闭密码登录，仅允许密钥登录。执行前请先用密钥新开会话验证可登录。"
+      hint: "关闭密码登录。先用密钥验证能登录。"
     },
     {
       label: "查看帮助",
       tag: "",
       cmd: "curl -s {{BASE_URL}} | bash -s -- -h",
-      hint: "打印全部可用参数及说明。"
+      hint: "查看全部参数。"
     }
   ],
   commandedLabel: "待执行命令",
@@ -70,40 +70,33 @@ const landing = {
   features: [
     {
       title: "每小时自动更新",
-      body: "写入一条 crontab，从已登记的公钥源拉取最新内容。改动 GitHub 上的公钥即可同步到所有跑过脚本的服务器。"
+      body: "改 GitHub 公钥即可同步到所有服务器。"
     },
     {
-      title: "只动受管块",
-      body: "公钥只写入 \`authorized_keys\` 中标记为 \`MANAGED BY CONF-SSHD SCRIPT\` 的区块，块外内容原样保留，覆盖前先备份。"
-    },
-    {
-      title: "改配置可回滚",
-      body: "修改 \`sshd_config\` 前备份为 \`.bak.conf-sshd\`；修改后用 \`sshd -T\` 核对实际生效值，不符即撤销并 reload，不断开现有连接。"
+      title: "只写受管块，可回滚",
+      body: "\`authorized_keys\` 只动受管区块；改 sshd 先备份，再用 \`sshd -T\` 校验，不符自动回滚。"
     },
     {
       title: "零依赖",
-      body: "只需要 root（或 sudo）与 \`curl\` / \`wget\`，无需 Node、Python 或 Docker。适用于 Debian、Ubuntu、CentOS 等主流发行版。"
+      body: "只要 root 与 \`curl\` / \`wget\`。"
     }
   ],
 
   // 提示块
-  noticeTitle: "执行前请先确认一件事",
+  noticeTitle: "先确认再关密码登录",
   noticeLines: [
-    "如果你打算关闭密码登录，请先用密钥新开一个终端确认能登录，再执行 \`-P yes\`。否则一旦密钥配错，就会失去远程访问。",
-    "脚本对 sshd 的每一次改动都会先备份、后校验；校验不通过会自动回滚，并在原会话中保留连接。"
+    "执行 \`-P yes\` 前，请先用密钥新开终端确认能登录，否则会失去远程访问。"
   ],
 
   // 备用命令（没有 curl 时）
-  altTitle: "没有 curl？用 wget",
+  altTitle: "没有 curl",
   altCommands: [
-    "wget -qO- {{BASE_URL}} | bash -s -- -c",
-    "curl -s {{BASE_URL}}/script.sh | bash -s -- -c"
+    "wget -qO- {{BASE_URL}} | bash -s -- -c"
   ],
 
   // 页脚
   footerLines: [
-    "浏览器访问本页显示说明；curl / wget 访问同一地址返回安装脚本。",
-    "公钥来源 {{BASE_URL}}/ssh.keys"
+    "浏览器访问显示本页；\`curl\` / \`wget\` 访问返回安装脚本。公钥来源 {{BASE_URL}}/ssh.keys"
   ]
 };
 
@@ -186,6 +179,7 @@ function renderLandingPage(baseUrl) {
 
   const cmdData = JSON.stringify(landing.commands.map((c) => fillBaseUrl(c.cmd, baseUrl)));
   const hintData = JSON.stringify(landing.commands.map((c) => c.hint));
+  const featureCols = Math.max(1, Math.min(landing.features.length, 3));
   return `<!DOCTYPE html>
 <html lang="${esc(landing.lang)}">
 <head>
@@ -271,7 +265,7 @@ function renderLandingPage(baseUrl) {
   .hint{margin:12px 2px 0;font-size:13.5px;color:var(--muted);min-height:20px}
   .sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
 
-  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:14px;margin-top:26px}
+  .grid{display:grid;grid-template-columns:repeat(${featureCols},1fr);gap:12px;margin-top:24px}
   .card{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:17px 18px}
   .card h3{margin:0 0 7px;font-size:15px;font-weight:600;letter-spacing:-.01em}
   .card p{margin:0;font-size:14px;line-height:1.55;color:var(--muted)}
@@ -296,6 +290,7 @@ function renderLandingPage(baseUrl) {
   @media (max-width:640px){
     .seg{flex-wrap:wrap;overflow:visible}
     .seg button{flex:1 1 44%}
+    .grid{grid-template-columns:1fr}
   }
   @media (max-width:560px){
     .strip{flex-direction:column}
