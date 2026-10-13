@@ -112,9 +112,24 @@ update_sshkeys() {
         exit 1
     fi
 
-    # 复核: 每一行都必须能被 ssh-keygen 解析, 防止 HTML/文档页骗过上面的类型匹配
-    if ! ssh-keygen -lf "$dl_tmp_file" >/dev/null 2>&1; then
-        echo "Downloaded content is not a parseable public key list at $(date '+%Y-%m-%d %H:%M:%S')"
+    # 复核: 逐行校验, 忽略空行与注释行; 每一条非空非注释行都必须是可解析的公钥.
+    # 仅整体 `ssh-keygen -lf` 会漏过"有效key+垃圾行"的混合内容.
+    local valid_key_count=0
+    while IFS= read -r kline || [ -n "$kline" ]; do
+        case "$kline" in
+            ''|'#'*) continue ;;
+        esac
+        if ! printf '%s\n' "$kline" | ssh-keygen -lf - >/dev/null 2>&1; then
+            echo "Downloaded content contains a non-key line at $(date '+%Y-%m-%d %H:%M:%S')"
+            echo "Aborting update to prevent lockout."
+            rm -f "$dl_tmp_file"
+            exit 1
+        fi
+        valid_key_count=$((valid_key_count + 1))
+    done < "$dl_tmp_file"
+
+    if [ "$valid_key_count" -lt 1 ]; then
+        echo "Downloaded content has no usable public key at $(date '+%Y-%m-%d %H:%M:%S')"
         echo "Aborting update to prevent lockout."
         rm -f "$dl_tmp_file"
         exit 1
@@ -235,9 +250,16 @@ if [ "$(has_param "-u" "--update-self")" == "true" ]; then
         cp "$target_script" "$target_script.bak"
     fi
 
-    # 下载到临时文件
-    if ! curl -sL "$script_url" -o "$target_script.tmp"; then
+    # 下载到临时文件（-f：HTTP 错误时直接失败，避免把错误页当脚本落盘）
+    if ! curl -fsSL --retry 3 --connect-timeout 10 --max-time 60 "$script_url" -o "$target_script.tmp"; then
          echo "Script download failed at $(date '+%Y-%m-%d %H:%M:%S')"
+         rm -f "$target_script.tmp"
+         exit 1
+    fi
+
+    # 校验内容确实像本脚本，避免把 HTML/错误页覆盖到正在使用的脚本上
+    if ! grep -qE 'sshkey_url|conf-sshd' "$target_script.tmp"; then
+         echo "Downloaded content does not look like conf-sshd script. Aborting."
          rm -f "$target_script.tmp"
          exit 1
     fi
@@ -265,7 +287,11 @@ if ! /usr/sbin/sshd -T > /dev/null 2>&1 && [ "$(has_param "-n" "--no-install-ssh
         exit 1
     fi
 else
-    echo "The ssh server is already installed."
+    if /usr/sbin/sshd -T > /dev/null 2>&1; then
+        echo "The ssh server is already installed."
+    else
+        echo "SSH server is not installed; installation skipped ('-n' specified)."
+    fi
 fi
 
 # 检查是否指定了 --allow-root-passwd
@@ -314,7 +340,17 @@ if [ "$(has_param "-p" "--allow-root-passwd")" == "true" ]; then
 
         if sshd -t >/dev/null 2>&1; then
             reload_sshd
-            echo "SSHD config updated and applied (sshd reloaded)."
+            # `sshd -t` 只验语法。用 `sshd -T` 核对实际生效值, 防止被更高优先级的 drop-in 覆盖后仍谎报成功。
+            expected_prl=$(printf '%s' "$new_sshd_permit_root_login_setting" | awk '{print tolower($2)}')
+            effective_prl=$(sshd -T 2>/dev/null | awk 'tolower($1)=="permitrootlogin"{print tolower($2); exit}')
+            if [ "$effective_prl" != "$expected_prl" ]; then
+                echo "ERROR: PermitRootLogin 未生效 (期望 '$expected_prl', 实际 '${effective_prl:-未知}')。可能被 /etc/ssh/sshd_config.d/ 下的 drop-in 覆盖。"
+                echo "已回滚 $sshd_config_file"
+                cp -a "$sshd_config_file.bak.conf-sshd" "$sshd_config_file"
+                reload_sshd
+                exit 1
+            fi
+            echo "SSHD config updated and applied (sshd reloaded, verified)."
         else
             echo "ERROR: 'sshd -t' 校验失败, 已回滚 $sshd_config_file"
             cp -a "$sshd_config_file.bak.conf-sshd" "$sshd_config_file"
