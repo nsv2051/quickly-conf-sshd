@@ -7,6 +7,27 @@ const SCRIPT_PH_SSH_KEY_URL = "{{ SSH_KEY_URL }}"
 const SCRIPT_PH_SCRIPT_URL = "{{ SCRIPT_URL }}"
 const SCRIPT_PH_DEFAULT_CRON = "{{ DEFAULT_CRON }}"
 
+// 单个公钥来源的拉取超时（毫秒）。避免上游挂起时一直等待、无法回落备用来源。
+const KEY_FETCH_TIMEOUT_MS = 10 * 1000;
+
+// 拉取一个公钥来源。
+// 返回公钥文本；以下任一情况都视为失败并返回 null，由调用方继续尝试下一个来源：
+//   1. 网络异常或超时（fetch 抛错）
+//   2. HTTP 状态非 2xx
+//   3. 响应内容为空（trim 后长度为 0）—— GitHub 账号无公钥时返回 200 + 空 body
+// 内容是否为合法公钥由服务端脚本负责校验，此处只判有无。
+async function fetchKeys(url) {
+  try {
+    const response = await fetch(url, { signal: AbortSignal.timeout(KEY_FETCH_TIMEOUT_MS) });
+    if (!response.ok) {
+      return null;
+    }
+    const keys = await response.text();
+    return keys.trim().length > 0 ? keys : null;
+  } catch (err) {
+    return null;
+  }
+}
 
 async function sendScriptContent(baseUrl, config) {
   let scriptContent = installScript
@@ -28,12 +49,14 @@ export default {
     const { pathname, host } = new URL(request.url);
     const baseUrl = `https://${host}`;
     if (pathname === "/ssh.keys") {
-      if (!config.githubUserName) {
+      // 至少要有一个可用来源（联网来源或内联备用），否则明确报错，
+      // 避免 fork 后未配置就静默拿不到钥匙（或拿到不属于自己的钥匙）。
+      if (config.sshKeyUrls.length === 0 && config.backupSshKeys.trim().length === 0) {
         return new Response(
-          "GITHUB_USER_NAME is not configured. 请在本 Worker 的 Settings → Variables and Secrets 中设置该变量后重试。",
+          "No SSH key source configured. 请在本 Worker 的 Settings → Variables and Secrets 中设置 GITHUB_USER_NAME（或 SSH_KEY_URLS / BACKUP_SSH_KEYS）后重试。",
           {
             status: 500,
-            statusText: "GITHUB_USER_NAME is not configured",
+            statusText: "No SSH key source configured",
             headers: {
               "content-type": "text/plain; charset=utf-8",
               "cache-control": "no-store"
@@ -42,9 +65,8 @@ export default {
         );
       }
       for (let url of config.sshKeyUrls) {
-        let response = await fetch(new Request(url));
-        if (response.ok) {
-          let keys = await response.text()
+        let keys = await fetchKeys(url);
+        if (keys !== null) {
           return new Response(keys, {
             headers: {
               "content-type": "text/plain; charset=utf-8",
@@ -53,7 +75,7 @@ export default {
           });
         }
       }
-      if (config.backupSshKeys.length > 0) {
+      if (config.backupSshKeys.trim().length > 0) {
         return new Response(config.backupSshKeys, {
           headers: {
             "content-type": "text/plain; charset=utf-8",

@@ -124,12 +124,14 @@ https://ssh.nnn.cx/
 
 | 变量名 | 必填 | 作用 | 默认值 |
 | --- | --- | --- | --- |
-| `GITHUB_USER_NAME` | **是** | 分发谁的 GitHub 公钥（决定 `/ssh.keys` 的取源） | 无，未设置时 `/ssh.keys` 报错 |
+| `GITHUB_USER_NAME` | 是* | 分发谁的 GitHub 公钥（决定 `/ssh.keys` 的取源） | 无 |
 | `CRON_EXPRESSION` | 否 | 脚本中 `-c` 的默认 cron 计划 | `0 0 * * *` |
 | `BACKUP_SSH_KEYS` | 否 | 内联备用公钥（多行文本原样使用） | 空 |
 | `SSH_KEY_URLS` | 否 | 额外公钥来源（换行或英文逗号分隔，例如 Keybase） | 空 |
 
-公钥来源顺序：`https://github.com/<GITHUB_USER_NAME>.keys`，然后是 `SSH_KEY_URLS` 中的地址；**全部失败**时才回落到 `BACKUP_SSH_KEYS`。
+> \* 仅在 `SSH_KEY_URLS` 与 `BACKUP_SSH_KEYS` **都**未配置时才是硬性必填。三者至少要配一个，否则 `/ssh.keys` 返回 500。
+
+公钥来源顺序：`https://github.com/<GITHUB_USER_NAME>.keys`，然后是 `SSH_KEY_URLS` 中的地址；**全部失败**时才回落到 `BACKUP_SSH_KEYS`。单个来源「失败」的判定包含三种情况：**网络异常或超时（10 秒）**、**HTTP 状态非 2xx**、**响应内容为空** —— 任一情况都会继续尝试下一个来源。
 
 文案 / 非敏感配置用 **Variables**；真正的密钥用 **Secrets**（写入后不可读回）。
 
@@ -166,7 +168,7 @@ npx wrangler deploy
 ### 部署后自检
 
 - 浏览器访问 Worker 地址，应显示落地页；
-- 访问 `{Worker地址}/ssh.keys`，应返回你在 GitHub 上登记的公钥；若报 500 并提示 `GITHUB_USER_NAME is not configured`，说明**必填变量尚未设置**；
+- 访问 `{Worker地址}/ssh.keys`，应返回你的公钥；若报 500 并提示 `No SSH key source configured`，说明**尚未配置任何公钥来源**（`GITHUB_USER_NAME` / `SSH_KEY_URLS` / `BACKUP_SSH_KEYS` 至少设一个）；
 - 访问 `{Worker地址}/script.sh`，应返回安装脚本，且脚本开头的 `cron` 与 `CRON_EXPRESSION` 一致。
 
 > 首次部署务必逐项自检。若把别人的公钥装进了自己的服务器，等于把访问权交给了别人。

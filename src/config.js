@@ -12,7 +12,8 @@ const DEFAULT_CRON = "0 0 * * *";
 export function readConfig(env) {
   env = env || {};
 
-  // 必填：你的 GitHub 用户名，决定 /ssh.keys 分发谁的公钥。
+  // 你的 GitHub 用户名，决定 /ssh.keys 首选的公钥来源。
+  // 未设置时仍可使用 SSH_KEY_URLS / BACKUP_SSH_KEYS 作为来源。
   const githubUserName = (env.GITHUB_USER_NAME || "").trim();
 
   // 脚本中 -c 的默认 cron 计划。
