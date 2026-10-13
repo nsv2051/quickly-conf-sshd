@@ -81,6 +81,13 @@ reload_sshd() {
     return 0
 }
 
+# 输出当前 crontab 中“非本脚本”的行。
+# 用子 shell + `|| true` 兜底：grep 无匹配时返回 0，避免 set -e + pipefail 误杀后续流程。
+# 匹配精确到脚本自身路径（/.conf-sshd/conf-sshd.sh），避免误删用户无关的注释行。
+filter_own_crontab() {
+    (crontab -l 2>/dev/null || true) | { grep -F -v "/.conf-sshd/conf-sshd.sh" || true; }
+}
+
 update_sshkeys() {
     if [ "$sshkey_url" == "" ] || [[ "$sshkey_url" == "{{"* ]]; then
         echo "ERROR: sshkey_url is not configured."
@@ -143,7 +150,7 @@ update_sshkeys() {
     touch "$auth_file"
     true > "$new_auth_file"
 
-    while IFS= read -r line; do
+    while IFS= read -r line || [ -n "$line" ]; do
         if [ "$line" == "$begin_marker" ]; then
             managed_block_found=true
             inside_managed_block=true
@@ -194,7 +201,7 @@ if [ "$(has_param "--uninstall")" == "true" ]; then
     
     if [ "$(command -v crontab)" != "" ]; then
         echo "Removing Crontab entry..."
-        ( (crontab -l 2>/dev/null || true) | grep -F -v "conf-sshd.sh") | crontab -
+        filter_own_crontab | crontab -
     else
         echo "Crontab utility not found, skipping Crontab removal."
     fi
@@ -356,7 +363,19 @@ if [ "$(has_param "-P" "--disable-password-auth")" == "true" ]; then
 
         if sshd -t >/dev/null 2>&1; then
             reload_sshd
-            echo "PasswordAuthentication=$pa_val applied. (drop-in: $sshd_dropin_file)"
+            # `sshd -t` 只验语法。用 `sshd -T` 核对实际生效值，防止“报告成功但配置未生效”。
+            effective_pa=$(sshd -T 2>/dev/null | awk 'tolower($1)=="passwordauthentication"{print tolower($2); exit}')
+            if [ "$effective_pa" != "$pa_val" ]; then
+                echo "ERROR: 配置未生效 (期望 PasswordAuthentication=$pa_val, 实际='${effective_pa:-未知}')."
+                if ! grep -qiE '^[[:space:]]*Include[[:space:]]+.*sshd_config\.d' /etc/ssh/sshd_config 2>/dev/null; then
+                    echo "HINT: /etc/ssh/sshd_config 未 Include sshd_config.d/*.conf, drop-in 不会生效, 请先补上 Include 行。"
+                fi
+                echo "已撤销 $sshd_dropin_file 并重新加载 sshd。"
+                rm -f "$sshd_dropin_file"
+                reload_sshd
+                exit 1
+            fi
+            echo "PasswordAuthentication=$pa_val applied and verified. (drop-in: $sshd_dropin_file)"
             if [ "$pa_val" == "no" ]; then
                 echo "NOTE: 先确认已授权的密钥能登录, 再关闭当前会话, 否则将失去远程访问。"
             fi
@@ -396,11 +415,11 @@ if [ "$(has_param "-c" "--cron")" == "true" ]; then
     cron=$(get_param_value "-c" "--cron" | tr '[:upper:]' '[:lower:]')
     if [ "$cron" == "false" ]; then
         # 检查 Crontab 是否已经设置
-        if [ "$( (crontab -l 2>/dev/null || true) | grep -F -c "conf-sshd.sh" )" -eq 0 ]; then
+        if [ -z "$( (crontab -l 2>/dev/null || true) | { grep -F "/.conf-sshd/conf-sshd.sh" || true; } )" ]; then
             echo "Crontab already clean. Will not be configured."
             exit 0
         else
-            (crontab -l 2>/dev/null || true) | grep -F -v "conf-sshd.sh" | crontab -
+            filter_own_crontab | crontab -
             echo "Crontab has been removed."
             exit 0
         fi
@@ -431,7 +450,7 @@ if [ "$(has_param "-c" "--cron")" == "true" ]; then
         cron_command="/bin/bash \"$target_script\" -o >> $HOME/.conf-sshd/run.log 2>&1"
         cron_job="$cron $cron_command"
 
-        ( (crontab -l 2>/dev/null || true) | grep -F -v "conf-sshd.sh") | { cat; echo "$cron_job"; } | crontab -
+        { filter_own_crontab; echo "$cron_job"; } | crontab -
 
         echo "Crontab has been configured.(Cron: '$cron')"
     fi
