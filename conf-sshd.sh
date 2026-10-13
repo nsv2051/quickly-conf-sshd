@@ -13,7 +13,15 @@ script_url="{{ SCRIPT_URL }}"
 
 ############ 脚本区 ##########
 
-script_params=("$@")
+# 归一化参数：把 --key=value 拆成 --key value，兼容两种写法。
+script_params=()
+for _arg in "$@"; do
+    case "$_arg" in
+        --*=*) script_params+=("${_arg%%=*}" "${_arg#*=}") ;;
+        *)     script_params+=("$_arg") ;;
+    esac
+done
+unset _arg
 has_param() {
     for param in "${script_params[@]}"; do
         for tParam in "$@"; do
@@ -427,6 +435,19 @@ fi
 
 # 更新密钥.
 update_sshkeys
+
+# 运行日志体积上限：超过 1MiB 时保留末尾 256KiB，避免长期运行无限增长。
+trim_run_log() {
+    local log_file="$HOME/.conf-sshd/run.log"
+    [ -f "$log_file" ] || return 0
+    local size
+    size=$(wc -c < "$log_file" 2>/dev/null || echo 0)
+    if [ "${size:-0}" -gt 1048576 ]; then
+        tail -c 262144 "$log_file" > "$log_file.tmp" 2>/dev/null && mv "$log_file.tmp" "$log_file"
+    fi
+    return 0
+}
+trim_run_log
 
 # 检查是否指定了 --cron
 if [ "$(has_param "-c" "--cron")" == "true" ]; then
