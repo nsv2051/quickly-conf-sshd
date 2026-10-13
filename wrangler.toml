@@ -1,0 +1,9 @@
+name = "quickly-conf-ssh-worker"
+main = "src/worker.js"
+compatibility_date = "2025-01-01"
+
+# 让 `.sh` 能作为文本模块被 import（内置安装脚本用）
+[[rules]]
+type = "Text"
+globs = ["**/*.sh"]
+fallthrough = true

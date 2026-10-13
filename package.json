@@ -1,0 +1,8 @@
+{
+  "name": "quickly-conf-ssh-worker",
+  "private": true,
+  "description": "把 GitHub 公钥一键部署到服务器并定期更新的 Cloudflare Worker",
+  "devDependencies": {
+    "wrangler": "4.150.0"
+  }
+}
