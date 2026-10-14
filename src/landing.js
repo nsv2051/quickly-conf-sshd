@@ -1,11 +1,11 @@
 export const landing = {
   // 页面语言与元信息
   lang: "zh-Hans",
-  title: "ssh.nnn.cx · SSH 公钥一键部署",
+  title: "{{HOST}} · SSH 公钥一键部署",
   description: "一条命令把 GitHub 上的 SSH 公钥部署到服务器，并保持每小时自动更新。",
 
   // 页头
-  brand: "ssh.nnn.cx",
+  brand: "{{HOST}}",
   brandStatus: "服务正常",
   brandSub: "SSH 公钥一键部署",
   repoLabel: "GitHub",
@@ -101,8 +101,15 @@ export function fillBaseUrl(text, baseUrl) {
   return text.split("{{BASE_URL}}").join(baseUrl);
 }
 
+// 把落地页配置里的 {{HOST}} 换成当前访问的域名（不含协议）.
+export function fillHost(text, host) {
+  return text.split("{{HOST}}").join(host);
+}
+
 // 由配置区生成落地页 HTML（结构固定，内容全部来自 landing）.
 export function renderLandingPage(baseUrl, landing) {
+  const host = baseUrl.replace(/^https?:\/\//, "");
+
   const esc = (s) => String(s)
     .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;");
@@ -147,7 +154,7 @@ export function renderLandingPage(baseUrl, landing) {
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="light dark">
 <meta name="description" content="${esc(landing.description)}">
-<title>${esc(landing.title)}</title>
+<title>${esc(fillHost(landing.title, host))}</title>
 <style>
   :root{
     --bg:#f5f5f7; --surface:#ffffff; --surface-2:#ececef; --text:#1d1d1f; --muted:#6e6e73;
@@ -276,7 +283,7 @@ export function renderLandingPage(baseUrl, landing) {
   <header>
     <div class="brand">
       <span class="dot" aria-hidden="true"></span>
-      <b class="mono">${esc(landing.brand)}</b>
+      <b class="mono">${esc(fillHost(landing.brand, host))}</b>
       <span class="sub">${esc(landing.brandSub)}</span>
     </div>
     <a class="gh" href="${esc(landing.repoUrl)}">${esc(landing.repoLabel)}</a>
