@@ -10,6 +10,7 @@ export const landing = {
   brandSub: "SSH 公钥一键部署",
   repoLabel: "GitHub",
   repoUrl: `https://github.com/nsv2051/quickly-conf-sshd`,
+  repoShort: `nsv2051/quickly-conf-sshd`,
 
   // 主标题与副标题
   headline: "一条命令，把 SSH 公钥部署到服务器",
@@ -80,15 +81,15 @@ export const landing = {
 
   // 页脚
   footerLines: [
-    "浏览器访问显示本页；\`curl\` / \`wget\` 访问返回安装脚本。公钥来源 {{BASE_URL}}/ssh.keys"
+    "浏览器访问显示本页；\`curl\` / \`wget\` 访问返回安装脚本。公钥来源 {{BASE_URL}}/keys"
   ],
   // 查看密钥与脚本：默认展示第一项（GitHub 公钥）
   viewTitle: "查看密钥与脚本",
   viewLede: "公钥与安装脚本都是纯文本，可直接在浏览器打开，或在此预览。",
   views: [
-    { label: "GitHub 公钥", url: "{{BASE_URL}}/ssh.keys/github" },
-    { label: "全部公钥", url: "{{BASE_URL}}/ssh.keys" },
-    { label: "安装脚本", url: "{{BASE_URL}}/script.sh" }
+    { label: "GitHub 公钥", url: "{{BASE_URL}}/keys/github" },
+    { label: "全部公钥", url: "{{BASE_URL}}/keys" },
+    { label: "安装脚本", url: "{{BASE_URL}}/sh" }
   ],
   viewOpenLabel: "在新标签打开",
   viewCopyLabel: "复制内容",
@@ -333,7 +334,7 @@ ${altCommands}
 
   <footer>
 ${footer}
-    <div>项目源码 <a href="${esc(landing.repoUrl)}">${esc(landing.repoUrl)}</a></div>
+    <div>项目源码 <a href="${esc(landing.repoUrl)}">${esc(landing.repoShort)}</a></div>
   </footer>
 
 </div>

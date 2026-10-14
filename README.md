@@ -73,7 +73,7 @@ curl -s https://ssh.nnn.cx | bash -s -- -h
 - 使用 `-P yes` 之前，请先用密钥开一个新会话确认可以登录，否则关闭密码登录后将失去远程访问。
 - 公钥写入 `~/.ssh/authorized_keys` 的受管块（`# --- BEGIN/END MANAGED BY CONF-SSHD SCRIPT ---`），块外的自定义内容会保留；覆盖前生成 `authorized_keys.bak` 备份。
 - 受管块若缺少 `END` 标记，脚本会拒绝更新（避免误删块外内容）。
-- 公钥取自 `https://{Worker 地址}/ssh.keys`，默认来自你 GitHub 账号下的 SSH 公钥。请留意：**谁能改动该地址或你的 GitHub 账号，谁就能登录所有执行过本脚本的服务器**；不需要自动更新时可用 `--uninstall` 断开。
+- 公钥取自 `https://{Worker 地址}/keys`，默认来自你 GitHub 账号下的 SSH 公钥。请留意：**谁能改动该地址或你的 GitHub 账号，谁就能登录所有执行过本脚本的服务器**；不需要自动更新时可用 `--uninstall` 断开。
 - 仓库与 Worker 中**只放公钥**，不要提交私钥。
 
 ## Paths
@@ -81,13 +81,13 @@ curl -s https://ssh.nnn.cx | bash -s -- -h
 获取 SSH 公钥：
 
 ```
-https://ssh.nnn.cx/ssh.keys
+https://ssh.nnn.cx/keys
 ```
 
 获取 Shell 脚本：
 
 ```
-https://ssh.nnn.cx/script.sh
+https://ssh.nnn.cx/sh
 ```
 
 获取 Shell 脚本（使用 Curl / Wget 访问）：
@@ -101,6 +101,8 @@ https://ssh.nnn.cx/
 ```
 https://ssh.nnn.cx/
 ```
+
+> 旧地址 `/ssh.keys`、`/ssh.keys/github`、`/ssh.keys/extra`、`/ssh.keys/backup`、`/script.sh` 仍可用（作为短路径的别名），以兼容已部署服务器上的旧引用。
 
 ## 项目结构
 
@@ -124,14 +126,14 @@ https://ssh.nnn.cx/
 
 | 变量名 | 必填 | 作用 | 默认值 |
 | --- | --- | --- | --- |
-| `GITHUB_USER_NAME` | 是* | 分发谁的 GitHub 公钥（决定 `/ssh.keys` 的取源） | 无 |
+| `GITHUB_USER_NAME` | 是* | 分发谁的 GitHub 公钥（决定 `/keys` 的取源） | 无 |
 | `CRON_EXPRESSION` | 否 | 脚本中 `-c` 的默认 cron 计划 | `0 0 * * *` |
 | `BACKUP_SSH_KEYS` | 否 | 内联备用公钥（多行文本原样使用） | 空 |
 | `SSH_KEY_URLS` | 否 | 额外公钥来源（换行或英文逗号分隔，例如 Keybase） | 空 |
 
 > 变量名支持**编号后缀**：`SSH_KEY_URLS`、`SSH_KEY_URLS_1`、`SSH_KEY_URLS_2` … 会被依次读取并合并；`BACKUP_SSH_KEYS` 同理。这样可以在 Cloudflare 面板里一项一行地填写（面板的值输入框是单行的），例如把每把公钥放进 `BACKUP_SSH_KEYS`、`BACKUP_SSH_KEYS_1`、`BACKUP_SSH_KEYS_2`。
 
-> \* 仅在 `SSH_KEY_URLS` 与 `BACKUP_SSH_KEYS` **都**未配置时才是硬性必填。三者至少要配一个，否则 `/ssh.keys` 返回 500。
+> \* 仅在 `SSH_KEY_URLS` 与 `BACKUP_SSH_KEYS` **都**未配置时才是硬性必填。三者至少要配一个，否则 `/keys` 返回 500。
 
 公钥来源顺序：`https://github.com/<GITHUB_USER_NAME>.keys`，然后是 `SSH_KEY_URLS` 中的地址；**全部失败**时才回落到 `BACKUP_SSH_KEYS`。单个来源「失败」的判定包含三种情况：**网络异常或超时（10 秒）**、**HTTP 状态非 2xx**、**响应内容为空** —— 任一情况都会继续尝试下一个来源。
 
@@ -170,8 +172,8 @@ npx wrangler deploy
 ### 部署后自检
 
 - 浏览器访问 Worker 地址，应显示落地页；
-- 访问 `{Worker地址}/ssh.keys`，应返回你的公钥；若报 500 并提示 `No SSH key source configured`，说明**尚未配置任何公钥来源**（`GITHUB_USER_NAME` / `SSH_KEY_URLS` / `BACKUP_SSH_KEYS` 至少设一个）；
-- 访问 `{Worker地址}/script.sh`，应返回安装脚本，且脚本开头的 `cron` 与 `CRON_EXPRESSION` 一致。
+- 访问 `{Worker地址}/keys`，应返回你的公钥；若报 500 并提示 `No SSH key source configured`，说明**尚未配置任何公钥来源**（`GITHUB_USER_NAME` / `SSH_KEY_URLS` / `BACKUP_SSH_KEYS` 至少设一个）；
+- 访问 `{Worker地址}/sh`，应返回安装脚本，且脚本开头的 `cron` 与 `CRON_EXPRESSION` 一致。
 
 > 首次部署务必逐项自检。若把别人的公钥装进了自己的服务器，等于把访问权交给了别人。
 
@@ -190,7 +192,7 @@ npx wrangler deploy
 - 公钥写入 `~/.ssh/authorized_keys` 的受管块（`# --- BEGIN/END MANAGED BY CONF-SSHD SCRIPT ---`），块外的自定义内容会保留；覆盖前生成 `authorized_keys.bak` 备份。
 - 受管块若缺少 `END` 标记，脚本会拒绝更新，避免误删块外内容。
 - 改动 `sshd_config` 前先备份为 `.bak.conf-sshd`，改完用 `sshd -T` 核对**实际生效的值**，不符自动撤销并 reload。
-- 公钥来源是 `{Worker 地址}/ssh.keys`。**谁能改动该地址或你的 GitHub 账号，谁就能登录所有执行过本脚本的服务器**；不需要自动更新时可用 `--uninstall` 断开。
+- 公钥来源是 `{Worker 地址}/keys`。**谁能改动该地址或你的 GitHub 账号，谁就能登录所有执行过本脚本的服务器**；不需要自动更新时可用 `--uninstall` 断开。
 - 配置项（含备用公钥）一律通过 Cloudflare 面板的 Variables / Secrets 管理，**不要写进代码或提交进仓库**。
 - 仓库与 Worker 中**只放公钥**，不要提交私钥。
 

@@ -7,6 +7,15 @@ const SCRIPT_PH_SSH_KEY_URL = "{{ SSH_KEY_URL }}"
 const SCRIPT_PH_SCRIPT_URL = "{{ SCRIPT_URL }}"
 const SCRIPT_PH_DEFAULT_CRON = "{{ DEFAULT_CRON }}"
 
+// 短路径为主；下表把旧路径映射为短路径，兼容已部署脚本中固化的旧地址。
+const PATH_ALIASES = {
+  "/ssh.keys": "/keys",
+  "/ssh.keys/github": "/keys/github",
+  "/ssh.keys/extra": "/keys/extra",
+  "/ssh.keys/backup": "/keys/backup",
+  "/script.sh": "/sh"
+};
+
 // 单个公钥来源的拉取超时（毫秒）。避免上游挂起时一直等待、无法回落备用来源。
 const KEY_FETCH_TIMEOUT_MS = 10 * 1000;
 
@@ -31,8 +40,8 @@ async function fetchKeys(url) {
 
 async function sendScriptContent(baseUrl, config) {
   let scriptContent = installScript
-    .replace(SCRIPT_PH_SSH_KEY_URL, `${baseUrl}/ssh.keys`)
-    .replace(SCRIPT_PH_SCRIPT_URL, `${baseUrl}/script.sh`)
+    .replace(SCRIPT_PH_SSH_KEY_URL, `${baseUrl}/keys`)
+    .replace(SCRIPT_PH_SCRIPT_URL, `${baseUrl}/sh`)
     .replace(SCRIPT_PH_DEFAULT_CRON, config.cronExpression);
 
   return new Response(scriptContent, {
@@ -47,8 +56,9 @@ export default {
   async fetch(request, env) {
     const config = readConfig(env);
     const { pathname, host } = new URL(request.url);
+    const route = PATH_ALIASES[pathname] || pathname;
     const baseUrl = `https://${host}`;
-    if (pathname === "/ssh.keys") {
+    if (route === "/keys") {
       // 至少要有一个可用来源（联网来源或内联备用），否则明确报错，
       // 避免 fork 后未配置就静默拿不到钥匙（或拿到不属于自己的钥匙）。
       if (config.sshKeyUrls.length === 0 && config.backupSshKeys.trim().length === 0) {
@@ -92,7 +102,7 @@ export default {
           }
         });
       }
-    } else if (pathname === "/ssh.keys/github") {
+    } else if (route === "/keys/github") {
       if (config.githubKeysUrl == null) {
         return new Response("GitHub key source not configured or unavailable.", {
           status: 404,
@@ -120,7 +130,7 @@ export default {
           "cache-control": "no-store"
         }
       });
-    } else if (pathname === "/ssh.keys/extra") {
+    } else if (route === "/keys/extra") {
       if (config.extraKeyUrls.length === 0) {
         return new Response("No extra key URLs configured.", {
           status: 404,
@@ -150,7 +160,7 @@ export default {
           "cache-control": "no-store"
         }
       });
-    } else if (pathname === "/ssh.keys/backup") {
+    } else if (route === "/keys/backup") {
       if (config.backupSshKeys.trim().length === 0) {
         return new Response("No backup keys configured.", {
           status: 404,
@@ -167,7 +177,7 @@ export default {
           "cache-control": "no-store"
         }
       });
-    } else if (pathname === "/") {
+    } else if (route === "/") {
       const userAgent = request.headers.get("User-Agent");
       if (userAgent != null && userAgent.match(/curl|libcurl|wget/i) !== null) {
         return await sendScriptContent(baseUrl, config);
@@ -179,7 +189,7 @@ export default {
           }
         });
       }
-    } else if (pathname === "/script.sh") {
+    } else if (route === "/sh") {
       return await sendScriptContent(baseUrl, config);
     } else {
       return new Response("Not found.", {

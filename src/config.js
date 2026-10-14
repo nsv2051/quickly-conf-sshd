@@ -25,7 +25,7 @@ function collectEnv(env, base, max = 20) {
 export function readConfig(env) {
   env = env || {};
 
-  // 你的 GitHub 用户名，决定 /ssh.keys 首选的公钥来源。
+  // 你的 GitHub 用户名，决定 /keys 首选的公钥来源。
   // 未设置时仍可使用 SSH_KEY_URLS / BACKUP_SSH_KEYS 作为来源。
   const githubUserName = (env.GITHUB_USER_NAME || "").trim();
 
