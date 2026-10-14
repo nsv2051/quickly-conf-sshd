@@ -146,7 +146,7 @@ export function renderLandingPage(baseUrl, landing) {
   :root{
     --bg:#f5f5f7; --surface:#ffffff; --surface-2:#ececef; --text:#1d1d1f; --muted:#6e6e73;
     --muted-strong:#51515a;
-    --line:rgba(0,0,0,.10); --accent:#0071e3; --accent-ink:#ffffff; --ok:#1d8a3f;
+    --line:rgba(0,0,0,.10); --accent:#0071e3; --accent-ink:#ffffff; --ok:#1d8a3f; --ok-ink:#ffffff; --accent-tag:#0058b0;
     --ink-bg:#1d1d1f; --ink-text:#f5f5f7; --ink-muted:#a1a1a6;
     --shadow:0 1px 2px rgba(0,0,0,.05), 0 14px 34px rgba(0,0,0,.09);
     --radius:18px;
@@ -155,7 +155,7 @@ export function renderLandingPage(baseUrl, landing) {
     :root{
       --bg:#000000; --surface:#1c1c1e; --surface-2:#2c2c2e; --text:#f5f5f7; --muted:#98989d;
       --muted-strong:#aeaeb2;
-      --line:rgba(255,255,255,.14); --accent:#0a84ff; --accent-ink:#ffffff; --ok:#30d158;
+      --line:rgba(255,255,255,.14); --accent:#0a84ff; --accent-ink:#ffffff; --ok:#30d158; --ok-ink:#1c1c1e; --accent-tag:#4aa3ff;
       --ink-bg:#2c2c2e; --ink-text:#f2f2f7; --ink-muted:#98989d;
       --shadow:0 1px 2px rgba(0,0,0,.6), 0 18px 44px rgba(0,0,0,.6);
     }
@@ -192,7 +192,7 @@ export function renderLandingPage(baseUrl, landing) {
   .seg button:hover{color:var(--text)}
   .seg button[aria-selected="true"]{background:var(--surface);color:var(--text);box-shadow:0 1px 2px rgba(0,0,0,.14)}
   .seg button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
-  .tag{font-size:11px;font-weight:600;color:var(--accent);margin-left:5px;vertical-align:1px}
+  .tag{font-size:11px;font-weight:600;color:var(--accent-tag);margin-left:5px;vertical-align:1px}
 
   .strip{display:flex;align-items:stretch;gap:10px;margin-top:14px}
   .cmd{
@@ -214,7 +214,7 @@ export function renderLandingPage(baseUrl, landing) {
   .copy:hover{filter:brightness(1.06)}
   .copy:active{transform:scale(.98)}
   .copy:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
-  .copy[data-done="1"]{background:var(--ok)}
+  .copy[data-done="1"]{background:var(--ok);color:var(--ok-ink)}
   .hint{margin:12px 2px 0;font-size:13.5px;color:var(--muted);min-height:20px}
   .sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
 
@@ -254,8 +254,9 @@ export function renderLandingPage(baseUrl, landing) {
 
   @media (max-width:640px){
     .seg{flex-wrap:wrap;overflow:visible}
-    .seg button{flex:1 1 44%}
+    .seg button{flex:1 1 44%;min-height:44px}
     .grid{grid-template-columns:1fr}
+    .url-copy{min-height:44px;padding:10px 14px}
   }
   @media (max-width:560px){
     .strip{flex-direction:column}
