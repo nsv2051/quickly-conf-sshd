@@ -81,7 +81,19 @@ export const landing = {
   // 页脚
   footerLines: [
     "浏览器访问显示本页；\`curl\` / \`wget\` 访问返回安装脚本。公钥来源 {{BASE_URL}}/ssh.keys"
-  ]
+  ],
+  // 查看密钥与脚本：默认展示第一项（GitHub 公钥）
+  viewTitle: "查看密钥与脚本",
+  viewLede: "公钥与安装脚本都是纯文本，可直接在浏览器打开，或在此预览。",
+  views: [
+    { label: "GitHub 公钥", url: "{{BASE_URL}}/ssh.keys/github" },
+    { label: "全部公钥", url: "{{BASE_URL}}/ssh.keys" },
+    { label: "安装脚本", url: "{{BASE_URL}}/script.sh" }
+  ],
+  viewOpenLabel: "在新标签打开",
+  viewCopyLabel: "复制内容",
+  viewLoading: "加载中…",
+  viewError: "加载失败，请点「在新标签打开」或用上方地址直接访问。"
 };
 
 // 把落地页配置里的 {{BASE_URL}} 换成当前访问地址.
@@ -118,6 +130,12 @@ export function renderLandingPage(baseUrl, landing) {
   const footer = landing.footerLines.map((l) =>
     `    <div>${esc(fillBaseUrl(l, baseUrl))}</div>`
   ).join("\n");
+
+  const viewTabs = landing.views.map((v, i) =>
+    `      <button role="tab" aria-selected="${i === 0 ? "true" : "false"}" data-v="${i}">${esc(v.label)}</button>`
+  ).join("\n");
+
+  const viewsData = JSON.stringify(landing.views.map((v) => ({ label: v.label, url: fillBaseUrl(v.url, baseUrl) })));
 
   const cmdData = JSON.stringify(landing.commands.map((c) => fillBaseUrl(c.cmd, baseUrl)));
   const hintData = JSON.stringify(landing.commands.map((c) => c.hint));
@@ -225,6 +243,15 @@ export function renderLandingPage(baseUrl, landing) {
   .alt h2{font-size:14px;font-weight:600;margin:0 0 10px;color:var(--muted)}
   .alt .cmd{margin:0}
   .alt .cmd + .cmd{margin-top:8px}
+  .view{margin-top:30px}
+  .view h2{font-size:14px;font-weight:600;margin:0 0 10px;color:var(--muted)}
+  .view .lede{font-size:14px;margin:0 0 12px}
+  .view .seg{margin-bottom:12px}
+  .view .seg button{flex:0 0 auto}
+  .viewer{margin:0;background:var(--ink-bg);color:var(--ink-text);border-radius:12px;padding:15px 16px;font-size:13px;line-height:1.5;max-height:280px;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere}
+  .view-actions{display:flex;gap:14px;align-items:center;margin-top:10px}
+  .lnk{appearance:none;background:none;border:0;padding:0;font:inherit;font-size:13.5px;color:var(--accent);cursor:pointer;text-decoration:none}
+  .lnk:hover{text-decoration:underline}
 
   footer{margin-top:38px;padding-top:18px;border-top:1px solid var(--line);color:var(--muted);font-size:13px;line-height:1.7}
   footer a{color:var(--muted)}
@@ -279,6 +306,19 @@ ${features}
 ${notice}
   </div>
 
+  <section class="view">
+    <h2>${esc(landing.viewTitle)}</h2>
+    <p class="lede">${esc(landing.viewLede)}</p>
+    <div class="seg" role="tablist" aria-label="${esc(landing.viewTitle)}" id="viewTabs">
+${viewTabs}
+    </div>
+    <pre class="viewer mono" id="viewer" aria-live="polite" aria-busy="true">${esc(landing.viewLoading)}</pre>
+    <div class="view-actions">
+      <a class="lnk" id="viewOpen" href="#" target="_blank" rel="noopener">${esc(landing.viewOpenLabel)}</a>
+      <button class="lnk" id="viewCopy" type="button">${esc(landing.viewCopyLabel)}</button>
+    </div>
+  </section>
+
   <section class="alt">
     <h2>${esc(landing.altTitle)}</h2>
 ${altCommands}
@@ -300,7 +340,12 @@ ${footer}
   var failLabel = ${JSON.stringify(landing.copyFailLabel)};
   var okAnnounce = ${JSON.stringify(landing.copyOkAnnounce)};
   var failAnnounce = ${JSON.stringify(landing.copyFailAnnounce)};
-  var tabs = Array.prototype.slice.call(document.querySelectorAll(".seg button"));
+  var tabs = Array.prototype.slice.call(document.querySelectorAll(".deck .seg button"));
+  var viewTabs = Array.prototype.slice.call(document.querySelectorAll("#viewTabs button"));
+  var viewerEl = document.getElementById("viewer");
+  var viewOpenEl = document.getElementById("viewOpen");
+  var viewCopyEl = document.getElementById("viewCopy");
+  var views = ${viewsData};
   var cmdEl = document.getElementById("cmd");
   var copyBtn = document.getElementById("copy");
   var hintEl = document.getElementById("hint");
@@ -374,6 +419,33 @@ ${footer}
   copyBtn.addEventListener("click", function(){ copyText(cmds[current], flash); });
   window.addEventListener("resize", syncScroll);
 
+  function renderView(i){
+    viewTabs.forEach(function(t, n){ t.setAttribute("aria-selected", n === i ? "true" : "false"); });
+    var v = views[i];
+    if (viewOpenEl) { viewOpenEl.href = v.url; }
+    viewerEl.setAttribute("aria-busy", "true");
+    viewerEl.textContent = ${JSON.stringify(landing.viewLoading)};
+    var ctrl = new AbortController();
+    var to = setTimeout(function(){ ctrl.abort(); }, 15000);
+    fetch(v.url, { signal: ctrl.signal, cache: "no-store" })
+      .then(function(r){ if (!r.ok) { throw new Error(String(r.status)); } return r.text(); })
+      .then(function(t){ clearTimeout(to); viewerEl.textContent = t.trim() || "(空)"; viewerEl.setAttribute("aria-busy", "false"); })
+      .catch(function(){ clearTimeout(to); viewerEl.textContent = ${JSON.stringify(landing.viewError)}; viewerEl.setAttribute("aria-busy", "false"); });
+  }
+
+  viewTabs.forEach(function(t, i){
+    t.addEventListener("click", function(){ renderView(i); });
+  });
+  if (viewCopyEl) {
+    viewCopyEl.addEventListener("click", function(){
+      var old = viewCopyEl.textContent;
+      copyText(viewerEl.textContent, function(ok){
+        viewCopyEl.textContent = ok ? ${JSON.stringify(landing.copyDoneLabel)} : ${JSON.stringify(landing.copyFailLabel)};
+        setTimeout(function(){ viewCopyEl.textContent = old; }, 1400);
+      });
+    });
+  }
+  renderView(0);
   render(0);
 })();
 </script>
