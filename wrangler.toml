@@ -1,4 +1,4 @@
-name = "quickly-conf-ssh-worker"
+name = "quickly-conf-ssh"
 main = "src/worker.js"
 compatibility_date = "2025-01-01"
 
