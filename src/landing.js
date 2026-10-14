@@ -1,16 +1,12 @@
 export const landing = {
   // 页面语言与元信息
   lang: "zh-Hans",
-  title: "{{HOST}} · SSH 公钥一键部署",
+  appTitle: "SSH 公钥一键部署",
   description: "一条命令把 GitHub 上的 SSH 公钥部署到服务器，并保持每小时自动更新。",
 
   // 页头
-  brand: "{{HOST}}",
-  brandStatus: "服务正常",
+  brandName: "Conf SSHD",
   brandSub: "SSH 公钥一键部署",
-  repoLabel: "GitHub",
-  repoUrl: `https://github.com/nsv2051/quickly-conf-sshd`,
-  repoShort: `nsv2051/quickly-conf-sshd`,
 
   // 主标题与副标题
   headline: "一条命令，把 SSH 公钥部署到服务器",
@@ -81,20 +77,17 @@ export const landing = {
 
   // 页脚
   footerLines: [
-    "浏览器访问显示本页；\`curl\` / \`wget\` 访问返回安装脚本。公钥来源 {{BASE_URL}}/keys"
+    "浏览器访问显示本页；\`curl\` / \`wget\` 访问返回安装脚本。"
   ],
   // 查看密钥与脚本：默认展示第一项（GitHub 公钥）
-  viewTitle: "查看密钥与脚本",
-  viewLede: "公钥与安装脚本都是纯文本，可直接在浏览器打开，或在此预览。",
+  viewTitle: "接口地址",
+  viewLede: "以下地址均为纯文本接口，浏览器可直接打开，或点「复制地址」取用。",
   views: [
     { label: "GitHub 公钥", url: "{{BASE_URL}}/keys/github" },
     { label: "全部公钥", url: "{{BASE_URL}}/keys" },
     { label: "安装脚本", url: "{{BASE_URL}}/sh" }
   ],
-  viewOpenLabel: "在新标签打开",
-  viewCopyLabel: "复制内容",
-  viewLoading: "加载中…",
-  viewError: "加载失败，请点「在新标签打开」或用上方地址直接访问。"
+  viewCopyLinkLabel: "复制地址"
 };
 
 // 把落地页配置里的 {{BASE_URL}} 换成当前访问地址.
@@ -102,15 +95,8 @@ export function fillBaseUrl(text, baseUrl) {
   return text.split("{{BASE_URL}}").join(baseUrl);
 }
 
-// 把落地页配置里的 {{HOST}} 换成当前访问的域名（不含协议）.
-export function fillHost(text, host) {
-  return text.split("{{HOST}}").join(host);
-}
-
 // 由配置区生成落地页 HTML（结构固定，内容全部来自 landing）.
 export function renderLandingPage(baseUrl, landing) {
-  const host = baseUrl.replace(/^https?:\/\//, "");
-
   const esc = (s) => String(s)
     .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;");
@@ -139,11 +125,10 @@ export function renderLandingPage(baseUrl, landing) {
     `    <div>${esc(fillBaseUrl(l, baseUrl))}</div>`
   ).join("\n");
 
-  const viewTabs = landing.views.map((v, i) =>
-    `      <button role="tab" aria-selected="${i === 0 ? "true" : "false"}" data-v="${i}">${esc(v.label)}</button>`
-  ).join("\n");
-
-  const viewsData = JSON.stringify(landing.views.map((v) => ({ label: v.label, url: fillBaseUrl(v.url, baseUrl) })));
+  const urlRows = landing.views.map((v) => {
+    const url = fillBaseUrl(v.url, baseUrl);
+    return `      <li class="url-row">\n        <span class="url-label">${esc(v.label)}</span>\n        <a class="url-text mono" href="${esc(url)}" target="_blank" rel="noopener">${esc(url)}</a>\n        <button class="url-copy" type="button" data-url="${esc(url)}">${esc(landing.viewCopyLinkLabel)}</button>\n      </li>`;
+  }).join("\n");
 
   const cmdData = JSON.stringify(landing.commands.map((c) => fillBaseUrl(c.cmd, baseUrl)));
   const hintData = JSON.stringify(landing.commands.map((c) => c.hint));
@@ -155,7 +140,8 @@ export function renderLandingPage(baseUrl, landing) {
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="light dark">
 <meta name="description" content="${esc(landing.description)}">
-<title>${esc(fillHost(landing.title, host))}</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect x='1' y='1' width='30' height='30' rx='8' fill='%230071e3'/%3E%3Cpath d='M9.5 11.5l4 4.5-4 4.5' fill='none' stroke='%23fff' stroke-width='2.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3Cpath d='M16.5 20.5h6' fill='none' stroke='%23fff' stroke-width='2.6' stroke-linecap='round'/%3E%3C/svg%3E">
+<title>${esc(landing.appTitle)}</title>
 <style>
   :root{
     --bg:#f5f5f7; --surface:#ffffff; --surface-2:#ececef; --text:#1d1d1f; --muted:#6e6e73;
@@ -187,11 +173,10 @@ export function renderLandingPage(baseUrl, landing) {
 
   header{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:28px 0 8px}
   .brand{display:flex;align-items:center;gap:10px;font-size:15px;letter-spacing:-.01em}
+  .mark{flex:0 0 auto;display:block}
   .dot{width:9px;height:9px;border-radius:50%;background:var(--ok);box-shadow:0 0 0 4px rgba(29,138,63,.18)}
   .brand b{font-weight:600}
   .brand span.sub{color:var(--muted)}
-  .gh{flex:0 0 auto;font-size:14px;color:var(--muted);text-decoration:none;border:1px solid var(--line);border-radius:999px;padding:6px 13px;transition:color .18s,border-color .18s}
-  .gh:hover{color:var(--text);border-color:rgba(0,0,0,.28)}
 
   h1{font-size:clamp(26px,5.8vw,40px);line-height:1.18;letter-spacing:-.022em;font-weight:600;margin:36px 0 12px;text-wrap:balance}
   .lede{margin:0;color:var(--muted);font-size:17px;line-height:1.55;max-width:36em}
@@ -254,12 +239,15 @@ export function renderLandingPage(baseUrl, landing) {
   .view{margin-top:30px}
   .view h2{font-size:14px;font-weight:600;margin:0 0 10px;color:var(--muted)}
   .view .lede{font-size:14px;margin:0 0 12px}
-  .view .seg{margin-bottom:12px}
-  .view .seg button{flex:0 0 auto}
-  .viewer{margin:0;background:var(--ink-bg);color:var(--ink-text);border-radius:12px;padding:15px 16px;font-size:13px;line-height:1.5;max-height:280px;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere}
-  .view-actions{display:flex;gap:14px;align-items:center;margin-top:10px}
-  .lnk{appearance:none;background:none;border:0;padding:0;font:inherit;font-size:13.5px;color:var(--accent);cursor:pointer;text-decoration:none}
-  .lnk:hover{text-decoration:underline}
+  .urls{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:8px}
+  .url-row{display:flex;align-items:center;gap:10px;background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:11px 13px}
+  .url-label{flex:0 0 auto;font-size:13px;color:var(--muted);min-width:68px}
+  .url-text{flex:1 1 auto;min-width:0;font-size:13px;color:var(--text);text-decoration:none;overflow-x:auto;white-space:nowrap;scrollbar-width:none}
+  .url-text::-webkit-scrollbar{display:none}
+  .url-text:hover{color:var(--accent)}
+  .url-copy{flex:0 0 auto;appearance:none;border:1px solid var(--line);background:var(--surface-2);color:var(--text);font:500 13px/1 inherit;padding:7px 12px;border-radius:9px;cursor:pointer;transition:filter .18s}
+  .url-copy:hover{filter:brightness(.97)}
+  .url-copy:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 
   footer{margin-top:38px;padding-top:18px;border-top:1px solid var(--line);color:var(--muted);font-size:13px;line-height:1.7}
   footer a{color:var(--muted)}
@@ -274,6 +262,8 @@ export function renderLandingPage(baseUrl, landing) {
     .copy{padding:13px 18px}
     .cmd{white-space:pre-wrap;overflow-wrap:anywhere}
     .cmd.is-scroll{-webkit-mask-image:none;mask-image:none}
+    .url-row{flex-wrap:wrap}
+    .url-text{flex:1 1 100%;order:3}
   }
   @media (prefers-reduced-motion:reduce){*{transition:none!important}}
 </style>
@@ -283,11 +273,15 @@ export function renderLandingPage(baseUrl, landing) {
 
   <header>
     <div class="brand">
-      <span class="dot" aria-hidden="true"></span>
-      <b class="mono">${esc(fillHost(landing.brand, host))}</b>
+      <svg class="mark" viewBox="0 0 32 32" width="28" height="28" aria-hidden="true">
+        <rect x="1" y="1" width="30" height="30" rx="8" fill="var(--accent)"/>
+        <path d="M9.5 11.5l4 4.5-4 4.5" fill="none" stroke="var(--accent-ink)" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>
+        <path d="M16.5 20.5h6" fill="none" stroke="var(--accent-ink)" stroke-width="2.6" stroke-linecap="round"/>
+      </svg>
+      <b>${esc(landing.brandName)}</b>
       <span class="sub">${esc(landing.brandSub)}</span>
+      <span class="dot" aria-hidden="true"></span>
     </div>
-    <a class="gh" href="${esc(landing.repoUrl)}">${esc(landing.repoLabel)}</a>
   </header>
 
   <h1>${esc(landing.headline)}</h1>
@@ -317,14 +311,9 @@ ${notice}
   <section class="view">
     <h2>${esc(landing.viewTitle)}</h2>
     <p class="lede">${esc(landing.viewLede)}</p>
-    <div class="seg" role="tablist" aria-label="${esc(landing.viewTitle)}" id="viewTabs">
-${viewTabs}
-    </div>
-    <pre class="viewer mono" id="viewer" aria-live="polite" aria-busy="true">${esc(landing.viewLoading)}</pre>
-    <div class="view-actions">
-      <a class="lnk" id="viewOpen" href="#" target="_blank" rel="noopener">${esc(landing.viewOpenLabel)}</a>
-      <button class="lnk" id="viewCopy" type="button">${esc(landing.viewCopyLabel)}</button>
-    </div>
+    <ul class="urls">
+${urlRows}
+    </ul>
   </section>
 
   <section class="alt">
@@ -334,7 +323,6 @@ ${altCommands}
 
   <footer>
 ${footer}
-    <div>项目源码 <a href="${esc(landing.repoUrl)}">${esc(landing.repoShort)}</a></div>
   </footer>
 
 </div>
@@ -349,11 +337,6 @@ ${footer}
   var okAnnounce = ${JSON.stringify(landing.copyOkAnnounce)};
   var failAnnounce = ${JSON.stringify(landing.copyFailAnnounce)};
   var tabs = Array.prototype.slice.call(document.querySelectorAll(".deck .seg button"));
-  var viewTabs = Array.prototype.slice.call(document.querySelectorAll("#viewTabs button"));
-  var viewerEl = document.getElementById("viewer");
-  var viewOpenEl = document.getElementById("viewOpen");
-  var viewCopyEl = document.getElementById("viewCopy");
-  var views = ${viewsData};
   var cmdEl = document.getElementById("cmd");
   var copyBtn = document.getElementById("copy");
   var hintEl = document.getElementById("hint");
@@ -427,33 +410,15 @@ ${footer}
   copyBtn.addEventListener("click", function(){ copyText(cmds[current], flash); });
   window.addEventListener("resize", syncScroll);
 
-  function renderView(i){
-    viewTabs.forEach(function(t, n){ t.setAttribute("aria-selected", n === i ? "true" : "false"); });
-    var v = views[i];
-    if (viewOpenEl) { viewOpenEl.href = v.url; }
-    viewerEl.setAttribute("aria-busy", "true");
-    viewerEl.textContent = ${JSON.stringify(landing.viewLoading)};
-    var ctrl = new AbortController();
-    var to = setTimeout(function(){ ctrl.abort(); }, 15000);
-    fetch(v.url, { signal: ctrl.signal, cache: "no-store" })
-      .then(function(r){ if (!r.ok) { throw new Error(String(r.status)); } return r.text(); })
-      .then(function(t){ clearTimeout(to); viewerEl.textContent = t.trim() || "(空)"; viewerEl.setAttribute("aria-busy", "false"); })
-      .catch(function(){ clearTimeout(to); viewerEl.textContent = ${JSON.stringify(landing.viewError)}; viewerEl.setAttribute("aria-busy", "false"); });
-  }
-
-  viewTabs.forEach(function(t, i){
-    t.addEventListener("click", function(){ renderView(i); });
-  });
-  if (viewCopyEl) {
-    viewCopyEl.addEventListener("click", function(){
-      var old = viewCopyEl.textContent;
-      copyText(viewerEl.textContent, function(ok){
-        viewCopyEl.textContent = ok ? ${JSON.stringify(landing.copyDoneLabel)} : ${JSON.stringify(landing.copyFailLabel)};
-        setTimeout(function(){ viewCopyEl.textContent = old; }, 1400);
+  Array.prototype.slice.call(document.querySelectorAll(".url-copy")).forEach(function(btn){
+    btn.addEventListener("click", function(){
+      var old = btn.textContent;
+      copyText(btn.getAttribute("data-url") || "", function(ok){
+        btn.textContent = ok ? ${JSON.stringify(landing.copyDoneLabel)} : ${JSON.stringify(landing.copyFailLabel)};
+        setTimeout(function(){ btn.textContent = old; }, 1400);
       });
     });
-  }
-  renderView(0);
+  });
   render(0);
 })();
 </script>
