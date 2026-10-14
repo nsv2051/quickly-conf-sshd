@@ -92,6 +92,81 @@ export default {
           }
         });
       }
+    } else if (pathname === "/ssh.keys/github") {
+      if (config.githubKeysUrl == null) {
+        return new Response("GitHub key source not configured or unavailable.", {
+          status: 404,
+          statusText: "Not Found",
+          headers: {
+            "content-type": "text/plain; charset=utf-8",
+            "cache-control": "no-store"
+          }
+        });
+      }
+      let keys = await fetchKeys(config.githubKeysUrl);
+      if (keys === null) {
+        return new Response("GitHub key source not configured or unavailable.", {
+          status: 404,
+          statusText: "Not Found",
+          headers: {
+            "content-type": "text/plain; charset=utf-8",
+            "cache-control": "no-store"
+          }
+        });
+      }
+      return new Response(keys, {
+        headers: {
+          "content-type": "text/plain; charset=utf-8",
+          "cache-control": "no-store"
+        }
+      });
+    } else if (pathname === "/ssh.keys/extra") {
+      if (config.extraKeyUrls.length === 0) {
+        return new Response("No extra key URLs configured.", {
+          status: 404,
+          statusText: "Not Found",
+          headers: {
+            "content-type": "text/plain; charset=utf-8",
+            "cache-control": "no-store"
+          }
+        });
+      }
+      for (let url of config.extraKeyUrls) {
+        let keys = await fetchKeys(url);
+        if (keys !== null) {
+          return new Response(keys, {
+            headers: {
+              "content-type": "text/plain; charset=utf-8",
+              "cache-control": "no-store"
+            }
+          });
+        }
+      }
+      return new Response("Failed to fetch keys from extra URLs.", {
+        status: 502,
+        statusText: "Bad Gateway",
+        headers: {
+          "content-type": "text/plain; charset=utf-8",
+          "cache-control": "no-store"
+        }
+      });
+    } else if (pathname === "/ssh.keys/backup") {
+      if (config.backupSshKeys.trim().length === 0) {
+        return new Response("No backup keys configured.", {
+          status: 404,
+          statusText: "Not Found",
+          headers: {
+            "content-type": "text/plain; charset=utf-8",
+            "cache-control": "no-store"
+          }
+        });
+      }
+      return new Response(config.backupSshKeys, {
+        headers: {
+          "content-type": "text/plain; charset=utf-8",
+          "cache-control": "no-store"
+        }
+      });
     } else if (pathname === "/") {
       const userAgent = request.headers.get("User-Agent");
       if (userAgent != null && userAgent.match(/curl|libcurl|wget/i) !== null) {

@@ -35,6 +35,10 @@ export function readConfig(env) {
     sshKeyUrls: githubUserName
       ? [`https://github.com/${githubUserName}.keys`, ...extraKeyUrls]
       : extraKeyUrls,
+    githubKeysUrl: githubUserName
+      ? `https://github.com/${githubUserName}.keys`
+      : null,
+    extraKeyUrls,
     backupSshKeys,
   };
 }
