@@ -129,6 +129,8 @@ https://ssh.nnn.cx/
 | `BACKUP_SSH_KEYS` | 否 | 内联备用公钥（多行文本原样使用） | 空 |
 | `SSH_KEY_URLS` | 否 | 额外公钥来源（换行或英文逗号分隔，例如 Keybase） | 空 |
 
+> 变量名支持**编号后缀**：`SSH_KEY_URLS`、`SSH_KEY_URLS_1`、`SSH_KEY_URLS_2` … 会被依次读取并合并；`BACKUP_SSH_KEYS` 同理。这样可以在 Cloudflare 面板里一项一行地填写（面板的值输入框是单行的），例如把每把公钥放进 `BACKUP_SSH_KEYS`、`BACKUP_SSH_KEYS_1`、`BACKUP_SSH_KEYS_2`。
+
 > \* 仅在 `SSH_KEY_URLS` 与 `BACKUP_SSH_KEYS` **都**未配置时才是硬性必填。三者至少要配一个，否则 `/ssh.keys` 返回 500。
 
 公钥来源顺序：`https://github.com/<GITHUB_USER_NAME>.keys`，然后是 `SSH_KEY_URLS` 中的地址；**全部失败**时才回落到 `BACKUP_SSH_KEYS`。单个来源「失败」的判定包含三种情况：**网络异常或超时（10 秒）**、**HTTP 状态非 2xx**、**响应内容为空** —— 任一情况都会继续尝试下一个来源。
