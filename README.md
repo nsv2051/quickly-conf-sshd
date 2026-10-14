@@ -1,137 +1,90 @@
-# quickly-conf-sshd
+# SSH 公钥一键部署（Cloudflare Worker）
 
-一条命令把 GitHub 上的 SSH 公钥部署到服务器，并保持定期自动更新。
+用一条命令把 SSH 公钥部署到服务器，并保持定期自动更新。公钥托管在一个轻量的 Cloudflare Worker 上，你改一处，所有执行过本脚本的服务器都能同步。
 
-这个脚本可以帮你做到这些事情：
+- **一条命令**：部署公钥并注册定期自动更新；
+- **集中管理**：公钥来源集中在 Worker 侧，改一处即可同步全部服务器；
+- **零依赖**：服务器端只需要 `root` 与 `curl` / `wget` 之一；
+- **只写受管块，可回滚**：`authorized_keys` 只改动受管区块；改 `sshd_config` 前先备份、改后校验，不符自动回滚。
 
-- 快速配置服务器的 SSH Server；
-- 定期自动更新 SSH 公钥到服务器中；
-- 集中管理注册到服务器的 SSH 公钥（例如使用 GitHub 管理 SSH 公钥）。
+> 本项目基于 [LamGC/quickly-conf-sshd](https://github.com/LamGC/quickly-conf-sshd) 重构，沿用上游的 Apache-2.0 许可。
 
-> 基于 [LamGC/quickly-conf-sshd](https://github.com/LamGC/quickly-conf-sshd) 重构。
+## 快速开始
 
-## Quick Usage
+把下文的 `YOUR_WORKER_URL` 替换为本 Worker 的访问地址（例如 `https://your-worker.example.workers.dev`，或你绑定的自定义域名）。
 
-部署密钥并设置定期更新：
-
-```bash
-curl -s https://ssh.nnn.cx | bash -s -- -c
-```
-
-如果不希望自动更新密钥，可以移除 `-c` 参数：
+部署公钥并注册定期自动更新：
 
 ```bash
-curl -s https://ssh.nnn.cx | bash -s
+curl -s https://YOUR_WORKER_URL | bash -s -- -c
 ```
 
-跳过检查 SSH Server，只需要安装秘钥的话，就需要单独使用 `-o` 参数：
+只部署公钥、不注册自动更新（去掉 `-c`）：
 
 ```bash
-curl -s https://ssh.nnn.cx | bash -s -- -o
+curl -s https://YOUR_WORKER_URL | bash -s
 ```
 
-添加 `-p yes` 参数可以设置允许 Root 用户使用密码登录 SSH（需使用 Root 用户执行脚本）：
+跳过 SSH Server 检查，只更新公钥：
 
 ```bash
-curl -s https://ssh.nnn.cx | bash -s -- -p yes
+curl -s https://YOUR_WORKER_URL | bash -s -- -o
 ```
 
-添加 `-P yes` 参数可以关闭密码登录，改为仅允许密钥登录（需使用 Root 用户执行脚本）：
+关闭密码登录，改为仅密钥登录（需 `root`）：
 
 ```bash
-curl -s https://ssh.nnn.cx | bash -s -- -P yes
+curl -s https://YOUR_WORKER_URL | bash -s -- -P yes
 ```
 
-> 执行前请先用密钥开一个新会话验证能登录，否则会失去远程访问；脚本会自动备份、校验并 reload sshd（不会断开现有连接）。
-
-要查看脚本的帮助信息，请使用 `-h` 参数：
+查看帮助：
 
 ```bash
-curl -s https://ssh.nnn.cx | bash -s -- -h
+curl -s https://YOUR_WORKER_URL | bash -s -- -h
 ```
 
-> Note: 更多用法请参见脚本帮助信息~
+> 执行 `-P yes` 前，请先用密钥新开一个会话确认可以登录，否则关闭密码登录后将失去远程访问；脚本会自动备份、校验并 reload sshd（不会断开现有连接）。
 
 ## 参数说明
 
-使用 `bash -s -- <参数>` 传入参数（示例见上一节）：
+以 `bash -s -- <参数>` 传入：
 
 | 参数 | 说明 |
 | --- | --- |
-| `-c [<cron>]` / `--cron` | 配置 Crontab 定期自动更新公钥；`-c false` 则删除 Crontab |
-| `-o` / `--only-update-keys` | 只更新公钥，不检查 / 改动 SSH Server 配置 |
+| `-c [<cron>]` / `--cron` | 配置 crontab 定期自动更新公钥；`-c false` 则删除 crontab |
+| `-o` / `--only-update-keys` | 只更新公钥，不改动 SSH Server 配置 |
 | `-u` / `--update-self` | 将本地脚本更新到最新版本 |
-| `-n` / `--no-install-sshd` | 不安装 SSH Server（仅 Root） |
-| `-p <yes \| no>` / `--allow-root-passwd` | 是否允许 Root 用**密码**登录。注意：**只写入 `PermitRootLogin`，不会改变密码认证本身**（仅 Root） |
-| `-P <yes \| no>` / `--disable-password-auth` | **关闭 / 开启密码登录**（`-P yes` 即仅允许密钥登录）：写入 `/etc/ssh/sshd_config.d/50-disable-password.conf` 并 reload sshd（仅 Root） |
-| `--uninstall` | 卸载：移除 Crontab 与本地脚本文件（不改动 `authorized_keys` 受管块与 `sshd_config`） |
-| `-h` / `--help` | 显示帮助信息 |
+| `-n` / `--no-install-sshd` | 不安装 SSH Server（仅 root） |
+| `-p <yes \| no>` / `--allow-root-passwd` | 是否允许 root 用**密码**登录（只写入 `PermitRootLogin`，不改变密码认证本身；仅 root） |
+| `-P <yes \| no>` / `--disable-password-auth` | **关闭 / 开启**密码登录（`-P yes` 即仅允许密钥登录；仅 root） |
+| `--uninstall` | 卸载：移除 crontab 与本地脚本（不改动 `authorized_keys` 受管块与 `sshd_config`） |
+| `-h` / `--help` | 显示帮助 |
 
-注意事项：
+## 接口
 
-- 改动 `sshd_config` 前自动备份为 `.bak.conf-sshd`；改动后执行 `sshd -t` 校验，失败自动回滚；成功后 `reload` sshd，无需手动重启，也不会断开现有连接。
-- 使用 `-P yes` 之前，请先用密钥开一个新会话确认可以登录，否则关闭密码登录后将失去远程访问。
-- 公钥写入 `~/.ssh/authorized_keys` 的受管块（`# --- BEGIN/END MANAGED BY CONF-SSHD SCRIPT ---`），块外的自定义内容会保留；覆盖前生成 `authorized_keys.bak` 备份。
-- 受管块若缺少 `END` 标记，脚本会拒绝更新（避免误删块外内容）。
-- 公钥取自 `https://{Worker 地址}/keys`，默认来自你 GitHub 账号下的 SSH 公钥。请留意：**谁能改动该地址或你的 GitHub 账号，谁就能登录所有执行过本脚本的服务器**；不需要自动更新时可用 `--uninstall` 断开。
-- 仓库与 Worker 中**只放公钥**，不要提交私钥。
-
-## Paths
-
-获取 SSH 公钥：
-
-```
-https://ssh.nnn.cx/keys
-```
-
-获取 Shell 脚本：
-
-```
-https://ssh.nnn.cx/sh
-```
-
-获取 Shell 脚本（使用 Curl / Wget 访问）：
-
-```
-https://ssh.nnn.cx/
-```
-
-访问落地页（浏览器访问）：
-
-```
-https://ssh.nnn.cx/
-```
+| 地址 | 说明 |
+| --- | --- |
+| `/keys` | 全部公钥（按来源顺序合并，取第一个可用来源） |
+| `/keys/github` | 指定 GitHub 账号的公钥 |
+| `/keys/extra` | 额外来源（`SSH_KEY_URLS`） |
+| `/keys/backup` | 内联备用公钥（`BACKUP_SSH_KEYS`） |
+| `/sh` | 安装脚本 |
+| `/` | 浏览器访问显示落地页；`curl` / `wget` 访问返回安装脚本 |
 
 > 旧地址 `/ssh.keys`、`/ssh.keys/github`、`/ssh.keys/extra`、`/ssh.keys/backup`、`/script.sh` 仍可用（作为短路径的别名），以兼容已部署服务器上的旧引用。
 
-## 项目结构
-
-```
-.
-├── wrangler.toml          # Worker 配置（入口、文本模块规则）
-├── package.json           # 固定 wrangler 版本，供 Workers Builds 使用
-├── src/
-│   ├── worker.js          # Worker 入口：路径路由与请求处理
-│   ├── config.js          # 环境变量读取（配置项全部来自环境变量）
-│   └── landing.js         # 落地页文案与 HTML 渲染
-├── script/
-│   └── conf-sshd.sh       # 安装脚本（作为文本模块打入 Worker）
-├── docs/                  # 文档配图
-└── .github/workflows/     # GitHub Actions
-```
-
 ## 配置
 
-所有配置项均通过环境变量设置。在 **Cloudflare 面板 → 该 Worker → Settings → Variables and Secrets** 添加。代码里统一用 `env.<变量名>` 读取。
+所有配置项均通过环境变量设置，在 **Cloudflare 面板 → 该 Worker → Settings → Variables and Secrets** 添加，代码里统一用 `env.<变量名>` 读取。
 
 | 变量名 | 必填 | 作用 | 默认值 |
 | --- | --- | --- | --- |
-| `GITHUB_USER_NAME` | 是* | 分发谁的 GitHub 公钥（决定 `/keys` 的取源） | 无 |
+| `GITHUB_USER_NAME` | 是* | 分发哪个 GitHub 账号的公钥（决定 `/keys` 首选来源） | 无 |
 | `CRON_EXPRESSION` | 否 | 脚本中 `-c` 的默认 cron 计划 | `0 0 * * *` |
-| `BACKUP_SSH_KEYS` | 否 | 内联备用公钥（多行文本原样使用） | 空 |
+| `BACKUP_SSH_KEYS` | 否 | 内联备用公钥（各变量可为单行一把公钥） | 空 |
 | `SSH_KEY_URLS` | 否 | 额外公钥来源（换行或英文逗号分隔，例如 Keybase） | 空 |
 
-> 变量名支持**编号后缀**：`SSH_KEY_URLS`、`SSH_KEY_URLS_1`、`SSH_KEY_URLS_2` … 会被依次读取并合并；`BACKUP_SSH_KEYS` 同理。这样可以在 Cloudflare 面板里一项一行地填写（面板的值输入框是单行的），例如把每把公钥放进 `BACKUP_SSH_KEYS`、`BACKUP_SSH_KEYS_1`、`BACKUP_SSH_KEYS_2`。
+> 变量名支持**编号后缀**：`SSH_KEY_URLS`、`SSH_KEY_URLS_1`、`SSH_KEY_URLS_2` … 会被依次读取并合并；`BACKUP_SSH_KEYS` 同理。这样可以在 Cloudflare 面板里一项一行地填写（面板的值输入框是单行的）。
 
 > \* 仅在 `SSH_KEY_URLS` 与 `BACKUP_SSH_KEYS` **都**未配置时才是硬性必填。三者至少要配一个，否则 `/keys` 返回 500。
 
@@ -141,7 +94,7 @@ https://ssh.nnn.cx/
 
 > 本地开发可在仓库根目录新建 `.dev.vars` 文件填写同名变量（已加入 `.gitignore`，不会提交）。
 
-## 部署 Worker
+## 部署
 
 ### 方式一：Workers Builds（推荐）
 
@@ -153,7 +106,7 @@ https://ssh.nnn.cx/
 4. Build command 留空，Deploy command 保持默认 `npx wrangler deploy`；
 5. 保存后触发一次构建。
 
-> ⚠️ 面板中的 Worker 名称必须与 `wrangler.toml` 中的 `name`（`quickly-conf-ssh-worker`）一致，否则构建会因名称不匹配失败。
+> ⚠️ 面板中的 Worker 名称必须与 `wrangler.toml` 中的 `name` 一致，否则构建会因名称不匹配失败。
 
 ### 方式二：Wrangler CLI
 
@@ -165,11 +118,9 @@ npx wrangler deploy
 
 ### 方式三：控制台手动部署
 
-不使用 Git 集成时，可在 Cloudflare 控制台部署：新建 Worker（类型选 HTTP 处理程序），或使用 Wrangler 直接发布。
+不使用 Git 集成时，可在 Cloudflare 控制台新建 Worker（类型选 HTTP 处理程序），或将代码粘贴/发布进去。
 
-![Create a new worker](docs/Create-a-new-worker.png)
-
-### 部署后自检
+## 部署后自检
 
 - 浏览器访问 Worker 地址，应显示落地页；
 - 访问 `{Worker地址}/keys`，应返回你的公钥；若报 500 并提示 `No SSH key source configured`，说明**尚未配置任何公钥来源**（`GITHUB_USER_NAME` / `SSH_KEY_URLS` / `BACKUP_SSH_KEYS` 至少设一个）；
@@ -179,13 +130,7 @@ npx wrangler deploy
 
 ### （可选）使用自定义域名
 
-在 Worker 详情页点击「触发器」，再点击「添加自定义域」，按提示输入已托管在 Cloudflare 的域名即可。
-
-![Add Custom Domain](docs/add-custom-domain.png)
-
-![Input Custom Domain](docs/input-custom-domain.png)
-
-![Added Custom Domain](docs/added-custom-domain.png)
+在 Worker 详情页点击「触发器」→「添加自定义域」，按提示输入已托管在 Cloudflare 的域名即可。
 
 ## 安全说明
 
@@ -196,10 +141,21 @@ npx wrangler deploy
 - 配置项（含备用公钥）一律通过 Cloudflare 面板的 Variables / Secrets 管理，**不要写进代码或提交进仓库**。
 - 仓库与 Worker 中**只放公钥**，不要提交私钥。
 
-## 来源与致谢
+## 项目结构
 
-本仓库基于 [LamGC/quickly-conf-sshd](https://github.com/LamGC/quickly-conf-sshd)（作者 [LamGC](https://github.com/LamGC)）重构而来，感谢原作者的工作。上游采用 Apache-2.0 协议，本仓库沿用同一协议。
+```
+.
+├── wrangler.toml          # Worker 配置（入口、文本模块规则、keep_vars）
+├── package.json           # 固定 wrangler 版本，供 Workers Builds 使用
+├── src/
+│   ├── worker.js          # Worker 入口：路径路由与请求处理
+│   ├── config.js          # 环境变量读取（含编号后缀变量合并）
+│   └── landing.js         # 落地页文案与 HTML 渲染（含内联 SVG logo）
+├── script/
+│   └── conf-sshd.sh       # 安装脚本（作为文本模块打入 Worker）
+└── .github/workflows/     # GitHub Actions
+```
 
-## License
+## 许可
 
 [Apache License 2.0](LICENSE)
