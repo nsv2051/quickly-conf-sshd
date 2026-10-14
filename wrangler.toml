@@ -1,4 +1,5 @@
-name = "quickly-conf-ssh"
+# wrangler.toml
+name = 'quickly-conf-sshd'
 main = "src/worker.js"
 compatibility_date = "2025-01-01"
 
