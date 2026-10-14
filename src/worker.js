@@ -55,9 +55,9 @@ async function sendScriptContent(baseUrl, config) {
 export default {
   async fetch(request, env) {
     const config = readConfig(env);
-    const { pathname, host } = new URL(request.url);
+    const { pathname, host, protocol } = new URL(request.url);
     const route = PATH_ALIASES[pathname] || pathname;
-    const baseUrl = `https://${host}`;
+    const baseUrl = `${protocol}//${host}`;
     if (route === "/keys") {
       // 至少要有一个可用来源（联网来源或内联备用），否则明确报错，
       // 避免 fork 后未配置就静默拿不到钥匙（或拿到不属于自己的钥匙）。
