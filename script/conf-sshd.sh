@@ -85,7 +85,8 @@ reload_sshd() {
         if service ssh reload 2>/dev/null; then return 0; fi
         if service sshd reload 2>/dev/null; then return 0; fi
     fi
-    echo "WARNING: 无法自动 reload sshd, 请手动执行: systemctl restart ssh"
+    echo "[警告] 无法自动 reload sshd, 请手动执行: systemctl restart ssh"
+    echo "[WARN] Unable to reload sshd automatically; please run manually: systemctl restart ssh"
     return 0
 }
 
@@ -98,24 +99,29 @@ filter_own_crontab() {
 
 update_sshkeys() {
     if [ "$sshkey_url" == "" ] || [[ "$sshkey_url" == "{{"* ]]; then
-        echo "ERROR: sshkey_url is not configured."
+        echo "[错误] 未配置 sshkey_url."
+        echo "[ERROR] sshkey_url is not configured."
         exit 1
     fi
 
-    echo "Downloading SSH public key from '$sshkey_url'"
+    echo "[执行] 正在从 '$sshkey_url' 下载 SSH 公钥..."
+    echo "[RUN] Downloading SSH public key from '$sshkey_url'"
     mkdir -p ~/.ssh
     chmod 700 ~/.ssh
 
     local dl_tmp_file=~/.ssh/authorized_keys.dl.tmp
     if ! curl -fsSL --retry 3 --connect-timeout 10 --max-time 60 "$sshkey_url" -o "$dl_tmp_file"; then
-        echo "Failed to download SSH public key at $(date '+%Y-%m-%d %H:%M:%S')"
+        echo "[错误] SSH 公钥下载失败, 时间: $(date '+%Y-%m-%d %H:%M:%S')"
+        echo "[ERROR] Failed to download SSH public key at $(date '+%Y-%m-%d %H:%M:%S')"
         rm -f "$dl_tmp_file"
         exit 1
     fi
 
     if [ ! -s "$dl_tmp_file" ] || ! grep -qE '^(ssh-rsa|ssh-ed25519|ecdsa-sha2-nistp|sk-ssh-ed25519|sk-ecdsa-sha2-nistp)' "$dl_tmp_file"; then
-        echo "Downloaded file is empty or does not contain valid SSH key types at $(date '+%Y-%m-%d %H:%M:%S')"
-        echo "Aborting update to prevent lockout."
+        echo "[错误] 下载内容为空或不含有效 SSH 公钥类型, 时间: $(date '+%Y-%m-%d %H:%M:%S')"
+        echo "[ERROR] Downloaded file is empty or contains no valid SSH key types at $(date '+%Y-%m-%d %H:%M:%S')"
+        echo "[警告] 为防止锁死登录, 已中止更新."
+        echo "[WARN] Aborting update to prevent lockout."
         rm -f "$dl_tmp_file"
         exit 1
     fi
@@ -128,8 +134,10 @@ update_sshkeys() {
             ''|'#'*) continue ;;
         esac
         if ! printf '%s\n' "$kline" | ssh-keygen -lf - >/dev/null 2>&1; then
-            echo "Downloaded content contains a non-key line at $(date '+%Y-%m-%d %H:%M:%S')"
-            echo "Aborting update to prevent lockout."
+            echo "[错误] 下载内容包含非公钥行, 时间: $(date '+%Y-%m-%d %H:%M:%S')"
+            echo "[ERROR] Downloaded content contains a non-key line at $(date '+%Y-%m-%d %H:%M:%S')"
+            echo "[警告] 为防止锁死登录, 已中止更新."
+            echo "[WARN] Aborting update to prevent lockout."
             rm -f "$dl_tmp_file"
             exit 1
         fi
@@ -137,12 +145,16 @@ update_sshkeys() {
     done < "$dl_tmp_file"
 
     if [ "$valid_key_count" -lt 1 ]; then
-        echo "Downloaded content has no usable public key at $(date '+%Y-%m-%d %H:%M:%S')"
-        echo "Aborting update to prevent lockout."
+        echo "[错误] 下载内容没有可用的公钥, 时间: $(date '+%Y-%m-%d %H:%M:%S')"
+        echo "[ERROR] Downloaded content has no usable public key at $(date '+%Y-%m-%d %H:%M:%S')"
+        echo "[警告] 为防止锁死登录, 已中止更新."
+        echo "[WARN] Aborting update to prevent lockout."
         rm -f "$dl_tmp_file"
         exit 1
     fi
     
+    echo "[信息] 即将写入的 SSH 公钥如下:"
+    echo "[INFO] SSH public keys to be installed:"
     echo "-------------------- SSH Keys --------------------"
     cat "$dl_tmp_file"
     echo "--------------------------------------------------"
@@ -164,7 +176,8 @@ update_sshkeys() {
                 seen && index($0, em) { ok = 1 }
                 END { exit (ok ? 0 : 1) }
             ' "$auth_file"; then
-            echo "ERROR: 受管块有 BEGIN 标记但缺少 END 标记, 为避免丢失文件其余内容, 本次跳过更新."
+            echo "[错误] 受管块有 BEGIN 标记但缺少 END 标记, 为避免丢失文件其余内容, 本次跳过更新."
+            echo "[ERROR] Managed block has a BEGIN marker but no END marker; skipping this update to avoid losing the rest of the file."
             rm -f "$dl_tmp_file"
             exit 1
         fi
@@ -215,30 +228,38 @@ update_sshkeys() {
     rm -f "$dl_tmp_file"
 
     chmod 600 "$auth_file"
-    echo "SSH public key updated successfully (managed block only) at $(date '+%Y-%m-%d %H:%M:%S')"
+    echo "[完成] SSH 公钥更新成功 (仅受管块), 时间: $(date '+%Y-%m-%d %H:%M:%S')"
+    echo "[DONE] SSH public key updated successfully (managed block only) at $(date '+%Y-%m-%d %H:%M:%S')"
 }
 
 # 检查是否指定了 --uninstall
 if [ "$(has_param "--uninstall")" == "true" ]; then
-    echo "Uninstalling conf-sshd (disabling auto-updates)..."
+    echo "[执行] 正在卸载 conf-sshd (关闭自动更新)..."
+    echo "[RUN] Uninstalling conf-sshd (disabling auto-updates)..."
     
     if [ "$(command -v crontab)" != "" ]; then
-        echo "Removing Crontab entry..."
+        echo "[执行] 正在移除 Crontab 条目..."
+        echo "[RUN] Removing Crontab entry..."
         filter_own_crontab | crontab -
     else
-        echo "Crontab utility not found, skipping Crontab removal."
+        echo "[警告] 未找到 crontab 工具, 跳过 Crontab 移除."
+        echo "[WARN] Crontab utility not found; skipping Crontab removal."
     fi
 
     script_dir="$HOME/.conf-sshd"
     if [ -d "$script_dir" ]; then
-        echo "Removing script files from $script_dir..."
+        echo "[执行] 正在移除脚本文件: $script_dir ..."
+        echo "[RUN] Removing script files from $script_dir ..."
         rm -rf "$script_dir"
     else
-        echo "Script directory $script_dir not found, skipping removal."
+        echo "[警告] 未找到脚本目录 $script_dir, 跳过移除."
+        echo "[WARN] Script directory $script_dir not found; skipping removal."
     fi
 
-    echo "Uninstall complete."
-    echo "Note: authorized_keys managed block and sshd_config were NOT affected."
+    echo "[完成] 卸载完成."
+    echo "[DONE] Uninstall complete."
+    echo "[提示] 未改动 authorized_keys 受管块与 sshd_config."
+    echo "[NOTE] The authorized_keys managed block and sshd_config were NOT affected."
     exit 0
 fi
 
@@ -250,7 +271,8 @@ fi
 
 # 检查是否指定了 --update-self
 if [ "$(has_param "-u" "--update-self")" == "true" ]; then
-    echo "Updating conf-sshd script..."
+    echo "[执行] 正在更新 conf-sshd 脚本..."
+    echo "[RUN] Updating conf-sshd script..."
     mkdir -p ~/.conf-sshd
     target_script=~/.conf-sshd/conf-sshd.sh
 
@@ -260,14 +282,16 @@ if [ "$(has_param "-u" "--update-self")" == "true" ]; then
 
     # 下载到临时文件（-f：HTTP 错误时直接失败，避免把错误页当脚本落盘）
     if ! curl -fsSL --retry 3 --connect-timeout 10 --max-time 60 "$script_url" -o "$target_script.tmp"; then
-         echo "Script download failed at $(date '+%Y-%m-%d %H:%M:%S')"
+         echo "[错误] 脚本下载失败, 时间: $(date '+%Y-%m-%d %H:%M:%S')"
+         echo "[ERROR] Script download failed at $(date '+%Y-%m-%d %H:%M:%S')"
          rm -f "$target_script.tmp"
          exit 1
     fi
 
     # 校验内容确实像本脚本，避免把 HTML/错误页覆盖到正在使用的脚本上
     if ! grep -qE 'sshkey_url|conf-sshd' "$target_script.tmp"; then
-         echo "Downloaded content does not look like conf-sshd script. Aborting."
+         echo "[错误] 下载内容不像 conf-sshd 脚本, 已中止."
+         echo "[ERROR] Downloaded content does not look like the conf-sshd script. Aborting."
          rm -f "$target_script.tmp"
          exit 1
     fi
@@ -275,30 +299,36 @@ if [ "$(has_param "-u" "--update-self")" == "true" ]; then
     mv "$target_script.tmp" "$target_script"
 
     chmod +x "$target_script"
-    echo "Script updated successfully at $(date '+%Y-%m-%d %H:%M:%S')"
+    echo "[完成] 脚本自更新成功, 时间: $(date '+%Y-%m-%d %H:%M:%S')"
+    echo "[DONE] Script updated successfully at $(date '+%Y-%m-%d %H:%M:%S')"
     exit 0
 fi
 
 # 检查 SSHD 是否安装.
 if ! /usr/sbin/sshd -T > /dev/null 2>&1 && [ "$(has_param "-n" "--no-install-sshd")" == "false" ]; then
     if [ "$(id -u)" -eq 0 ]; then
-        echo "The ssh server is not installed, and the script is executed as root, so it will be installed."
+        echo "[执行] 未检测到 SSH 服务, 当前以 root 运行, 将自动安装."
+        echo "[RUN] SSH server is not installed; running as root, so it will be installed."
         if [ -f /etc/redhat-release ]; then
             yum install -y openssh-server
         elif [ -f /etc/debian_version ]; then
             apt-get update
             apt-get install -y openssh-server
         fi
-        echo "The ssh server has been installed."
+        echo "[完成] SSH 服务安装完成."
+        echo "[DONE] SSH server installed successfully."
     else
-        echo "The ssh server is not installed, but the script is executed as a non-root user and cannot be installed."
+        echo "[错误] 未检测到 SSH 服务, 且当前为非 root 用户, 无法安装."
+        echo "[ERROR] SSH server is not installed and the script runs as a non-root user, so it cannot be installed."
         exit 1
     fi
 else
     if /usr/sbin/sshd -T > /dev/null 2>&1; then
-        echo "The ssh server is already installed."
+        echo "[信息] SSH 服务已安装."
+        echo "[INFO] SSH server is already installed."
     else
-        echo "SSH server is not installed; installation skipped ('-n' specified)."
+        echo "[信息] 未安装 SSH 服务, 已按 '-n' 跳过安装."
+        echo "[INFO] SSH server is not installed; installation skipped ('-n' specified)."
     fi
 fi
 
@@ -313,12 +343,15 @@ if [ "$(has_param "-p" "--allow-root-passwd")" == "true" ]; then
 
         if [ "$allow_root_passwd" == "yes" ]; then
             new_sshd_permit_root_login_setting="PermitRootLogin yes"
-            echo "Setting: Root user is allowed to log in with password."
+            echo "[信息] 已设置: 允许 root 用户使用密码登录."
+            echo "[INFO] Setting: Root user is allowed to log in with password."
         elif [ "$allow_root_passwd" == "no" ]; then
             new_sshd_permit_root_login_setting="PermitRootLogin prohibit-password"
-            echo "Setting: Root user is prohibited from logging in with password."
+            echo "[信息] 已设置: 禁止 root 用户使用密码登录."
+            echo "[INFO] Setting: Root user is prohibited from logging in with password."
         else
-            echo "Please specify 'yes' or 'no' for --allow-root-passwd."
+            echo "[错误] 请为 --allow-root-passwd 指定 'yes' 或 'no'."
+            echo "[ERROR] Please specify 'yes' or 'no' for --allow-root-passwd."
             exit 1
         fi
 
@@ -332,7 +365,8 @@ if [ "$(has_param "-p" "--allow-root-passwd")" == "true" ]; then
         ' "$sshd_config_file" > "$sshd_config_file.conf-sshd.new"
 
         if [ ! -s "$sshd_config_file.conf-sshd.new" ]; then
-            echo "ERROR: 生成新配置失败, 原文件保持不变."
+            echo "[错误] 生成新配置失败, 原文件保持不变."
+            echo "[ERROR] Failed to generate new config; the original file is left unchanged."
             rm -f "$sshd_config_file.conf-sshd.new"
             exit 1
         fi
@@ -341,7 +375,8 @@ if [ "$(has_param "-p" "--allow-root-passwd")" == "true" ]; then
         mv "$sshd_config_file.conf-sshd.new" "$sshd_config_file"
 
         if ! grep -qF "$new_sshd_permit_root_login_setting" "$sshd_config_file"; then
-            echo "ERROR: 未能写入 '$new_sshd_permit_root_login_setting', 已回滚."
+            echo "[错误] 未能写入 '$new_sshd_permit_root_login_setting', 已回滚."
+            echo "[ERROR] Failed to write '$new_sshd_permit_root_login_setting'; rolled back."
             cp -a "$sshd_config_file.bak.conf-sshd" "$sshd_config_file"
             exit 1
         fi
@@ -352,21 +387,26 @@ if [ "$(has_param "-p" "--allow-root-passwd")" == "true" ]; then
             expected_prl=$(printf '%s' "$new_sshd_permit_root_login_setting" | awk '{print tolower($2)}')
             effective_prl=$(sshd -T 2>/dev/null | awk 'tolower($1)=="permitrootlogin"{print tolower($2); exit}')
             if [ "$effective_prl" != "$expected_prl" ]; then
-                echo "ERROR: PermitRootLogin 未生效 (期望 '$expected_prl', 实际 '${effective_prl:-未知}')。可能被 /etc/ssh/sshd_config.d/ 下的 drop-in 覆盖。"
-                echo "已回滚 $sshd_config_file"
+                echo "[错误] PermitRootLogin 未生效 (期望 '$expected_prl', 实际 '${effective_prl:-未知}')。可能被 /etc/ssh/sshd_config.d/ 下的 drop-in 覆盖。"
+                echo "[ERROR] PermitRootLogin did not take effect (expected '$expected_prl', actual '${effective_prl:-unknown}'). It may be overridden by a drop-in under /etc/ssh/sshd_config.d/."
+                echo "[信息] 已回滚 $sshd_config_file"
+                echo "[INFO] Rolled back $sshd_config_file"
                 cp -a "$sshd_config_file.bak.conf-sshd" "$sshd_config_file"
                 reload_sshd
                 exit 1
             fi
-            echo "SSHD config updated and applied (sshd reloaded, verified)."
+            echo "[完成] SSHD 配置已更新并生效 (sshd 已 reload 并校验通过)."
+            echo "[DONE] SSHD config updated and applied (sshd reloaded, verified)."
         else
-            echo "ERROR: 'sshd -t' 校验失败, 已回滚 $sshd_config_file"
+            echo "[错误] 'sshd -t' 校验失败, 已回滚 $sshd_config_file"
+            echo "[ERROR] 'sshd -t' validation failed; rolled back $sshd_config_file"
             cp -a "$sshd_config_file.bak.conf-sshd" "$sshd_config_file"
             exit 1
         fi
 
     else
-        echo "WARNING: 非 root 用户无法设置 root 的密码登录方式, 已跳过该步骤."
+        echo "[警告] 非 root 用户无法设置 root 的密码登录方式, 已跳过该步骤."
+        echo "[WARN] A non-root user cannot change root's password login; step skipped."
     fi
 fi
 
@@ -380,7 +420,8 @@ if [ "$(has_param "-P" "--disable-password-auth")" == "true" ]; then
         elif [ "$dp_arg" == "no" ]; then
             pa_val="yes"
         else
-            echo "Please specify 'yes' or 'no' for --disable-password-auth."
+            echo "[错误] 请为 --disable-password-auth 指定 'yes' 或 'no'."
+            echo "[ERROR] Please specify 'yes' or 'no' for --disable-password-auth."
             exit 1
         fi
 
@@ -400,7 +441,8 @@ if [ "$(has_param "-P" "--disable-password-auth")" == "true" ]; then
         } > "$sshd_dropin_file"
 
         if ! grep -qF "PasswordAuthentication $pa_val" "$sshd_dropin_file"; then
-            echo "ERROR: drop-in 写入校验失败, 已撤销 $sshd_dropin_file"
+            echo "[错误] drop-in 写入校验失败, 已撤销 $sshd_dropin_file"
+            echo "[ERROR] drop-in write verification failed; reverted $sshd_dropin_file"
             rm -f "$sshd_dropin_file"
             exit 1
         fi
@@ -410,26 +452,33 @@ if [ "$(has_param "-P" "--disable-password-auth")" == "true" ]; then
             # `sshd -t` 只验语法。用 `sshd -T` 核对实际生效值，防止“报告成功但配置未生效”。
             effective_pa=$(sshd -T 2>/dev/null | awk 'tolower($1)=="passwordauthentication"{print tolower($2); exit}')
             if [ "$effective_pa" != "$pa_val" ]; then
-                echo "ERROR: 配置未生效 (期望 PasswordAuthentication=$pa_val, 实际='${effective_pa:-未知}')."
+                echo "[错误] 配置未生效 (期望 PasswordAuthentication=$pa_val, 实际='${effective_pa:-未知}')."
+                echo "[ERROR] Config did not take effect (expected PasswordAuthentication=$pa_val, actual='${effective_pa:-unknown}')."
                 if ! grep -qiE '^[[:space:]]*Include[[:space:]]+.*sshd_config\.d' /etc/ssh/sshd_config 2>/dev/null; then
-                    echo "HINT: /etc/ssh/sshd_config 未 Include sshd_config.d/*.conf, drop-in 不会生效, 请先补上 Include 行。"
+                    echo "[提示] /etc/ssh/sshd_config 未 Include sshd_config.d/*.conf, drop-in 不会生效, 请先补上 Include 行。"
+                    echo "[NOTE] /etc/ssh/sshd_config does not Include sshd_config.d/*.conf, so the drop-in will not take effect; add the Include line first."
                 fi
-                echo "已撤销 $sshd_dropin_file 并重新加载 sshd。"
+                echo "[信息] 已撤销 $sshd_dropin_file 并重新加载 sshd。"
+                echo "[INFO] Reverted $sshd_dropin_file and reloaded sshd."
                 rm -f "$sshd_dropin_file"
                 reload_sshd
                 exit 1
             fi
-            echo "PasswordAuthentication=$pa_val applied and verified. (drop-in: $sshd_dropin_file)"
+            echo "[完成] PasswordAuthentication=$pa_val 已生效并校验通过. (drop-in: $sshd_dropin_file)"
+            echo "[DONE] PasswordAuthentication=$pa_val applied and verified. (drop-in: $sshd_dropin_file)"
             if [ "$pa_val" == "no" ]; then
-                echo "NOTE: 先确认已授权的密钥能登录, 再关闭当前会话, 否则将失去远程访问。"
+                echo "[提示] 先确认已授权的密钥能登录, 再关闭当前会话, 否则将失去远程访问。"
+                echo "[NOTE] Verify an authorized key can log in before closing this session, or you may lose remote access."
             fi
         else
-            echo "ERROR: 'sshd -t' 校验失败, 已撤销 $sshd_dropin_file"
+            echo "[错误] 'sshd -t' 校验失败, 已撤销 $sshd_dropin_file"
+            echo "[ERROR] 'sshd -t' validation failed; reverted $sshd_dropin_file"
             rm -f "$sshd_dropin_file"
             exit 1
         fi
     else
-        echo "WARNING: 非 root 用户无法修改密码认证方式, 已跳过该步骤."
+        echo "[警告] 非 root 用户无法修改密码认证方式, 已跳过该步骤."
+        echo "[WARN] A non-root user cannot change password authentication; step skipped."
     fi
 fi
 
@@ -454,30 +503,36 @@ if [ "$(has_param "-c" "--cron")" == "true" ]; then
     # 检查 Crontab 是否已安装
     if [ "$(command -v crontab)" == "" ]; then
         if [ "$(id -u)" -eq 0 ]; then
-            echo "The crontab is not installed, and the script is executed as a root user, so it will be installed."
+            echo "[执行] 未检测到 crontab, 当前以 root 运行, 将自动安装."
+            echo "[RUN] crontab is not installed; running as root, so it will be installed."
             if [ -f /etc/redhat-release ]; then
                 yum install -y crontabs
             elif [ -f /etc/debian_version ]; then
                 apt-get update
                 apt-get install -y cron
             fi
-            echo "The crontab has been installed."
+            echo "[完成] crontab 安装完成."
+            echo "[DONE] crontab installed successfully."
         else
-            echo "The crontab is not installed, but the script is executed as a non-root user and cannot be installed."
+            echo "[错误] 未检测到 crontab, 且当前为非 root 用户, 无法安装."
+            echo "[ERROR] crontab is not installed and the script runs as a non-root user, so it cannot be installed."
             exit 1
         fi
     else
-        echo "The crontab is already installed."
+        echo "[信息] crontab 已安装."
+        echo "[INFO] crontab is already installed."
     fi
     cron=$(get_param_value "-c" "--cron" | tr '[:upper:]' '[:lower:]')
     if [ "$cron" == "false" ]; then
         # 检查 Crontab 是否已经设置
         if [ -z "$( (crontab -l 2>/dev/null || true) | { grep -F "/.conf-sshd/conf-sshd.sh" || true; } )" ]; then
-            echo "Crontab already clean. Will not be configured."
+            echo "[信息] Crontab 已处于干净状态, 无需配置."
+            echo "[INFO] Crontab is already clean; nothing to configure."
             exit 0
         else
             filter_own_crontab | crontab -
-            echo "Crontab has been removed."
+            echo "[完成] Crontab 已移除."
+            echo "[DONE] Crontab has been removed."
             exit 0
         fi
     else
@@ -488,27 +543,33 @@ if [ "$(has_param "-c" "--cron")" == "true" ]; then
         mkdir -p ~/.conf-sshd
         target_script=~/.conf-sshd/conf-sshd.sh
         if [ ! -f "$0" ]; then
-            echo "Downloading conf-sshd script..."
+            echo "[执行] 正在下载 conf-sshd 脚本..."
+            echo "[RUN] Downloading conf-sshd script..."
             if ! curl -sL "$script_url" -o "$target_script.tmp"; then
-                 echo "Script download failed at $(date '+%Y-%m-%d %H:%M:%S')"
+                 echo "[错误] 脚本下载失败, 时间: $(date '+%Y-%m-%d %H:%M:%S')"
+                 echo "[ERROR] Script download failed at $(date '+%Y-%m-%d %H:%M:%S')"
                  rm -f "$target_script.tmp"
                  exit 1
             fi
             mv "$target_script.tmp" "$target_script"
         else 
-            echo "Copying conf-sshd script..."
+            echo "[执行] 正在复制 conf-sshd 脚本..."
+            echo "[RUN] Copying conf-sshd script..."
             cp "$0" "$target_script"
         fi
         
         chmod +x "$target_script"
-        echo "Install conf-sshd script successfully."
+        echo "[完成] conf-sshd 脚本安装成功."
+        echo "[DONE] conf-sshd script installed successfully."
         # 将当前脚本追加到当前用户的 Crontab 中
-        echo "Configuring Crontab..."
+        echo "[执行] 正在配置 Crontab..."
+        echo "[RUN] Configuring Crontab..."
         cron_command="/bin/bash \"$target_script\" -o >> $HOME/.conf-sshd/run.log 2>&1"
         cron_job="$cron $cron_command"
 
         { filter_own_crontab; echo "$cron_job"; } | crontab -
 
-        echo "Crontab has been configured.(Cron: '$cron')"
+        echo "[完成] Crontab 配置完成. (Cron: '$cron')"
+        echo "[DONE] Crontab configured. (Cron: '$cron')"
     fi
 fi
