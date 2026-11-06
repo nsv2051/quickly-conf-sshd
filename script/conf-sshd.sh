@@ -194,6 +194,10 @@ update_sshkeys() {
             {
                 echo "$begin_marker"
                 cat "$dl_tmp_file"
+                # 下载正文末尾可能没有换行, 先补一个, 确保 END 标记独占一行。
+                if [ -n "$(tail -c 1 "$dl_tmp_file")" ]; then
+                    echo ""
+                fi
                 echo "$end_marker"
             } >> "$new_auth_file"
             
@@ -215,6 +219,10 @@ update_sshkeys() {
         {
             echo "$begin_marker"
             cat "$dl_tmp_file"
+            # 下载正文末尾可能没有换行, 先补一个, 确保 END 标记独占一行。
+            if [ -n "$(tail -c 1 "$dl_tmp_file")" ]; then
+                echo ""
+            fi
             echo "$end_marker"
         } >> "$new_auth_file"
     fi

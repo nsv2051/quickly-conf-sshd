@@ -39,7 +39,10 @@ export function readConfig(env) {
     .filter((s) => s.length > 0);
 
   // 内联备用公钥：BACKUP_SSH_KEYS、BACKUP_SSH_KEYS_1 … 合并（各变量可为单行一把公钥）。
-  const backupSshKeys = collectEnv(env, "BACKUP_SSH_KEYS").join("\n");
+  // 非空时统一以单个换行结尾，与 GitHub 等联网来源的正文形态保持一致，
+  // 避免下游按行拼接受管块时 END 标记粘到最后一把钥匙行尾。
+  const backupSshKeysText = collectEnv(env, "BACKUP_SSH_KEYS").join("\n").replace(/\s+$/, "");
+  const backupSshKeys = backupSshKeysText.length > 0 ? `${backupSshKeysText}\n` : "";
 
   return {
     githubUserName,
