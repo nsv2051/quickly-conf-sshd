@@ -53,6 +53,7 @@ curl -s https://YOUR_WORKER_URL | bash -s -- -h
 | --- | --- |
 | `-c [<cron>]` / `--cron` | 配置 crontab 定期自动更新公钥；`-c false` 则删除 crontab |
 | `-o` / `--only-update-keys` | 只更新公钥，不改动 SSH Server 配置 |
+| `--audit` | 只读审计：检查本体/cron/受管块/公钥数量，不修改任何文件；有异常时退出码 1 |
 | `-u` / `--update-self` | 将本地脚本更新到最新版本 |
 | `-n` / `--no-install-sshd` | 不安装 SSH Server（仅 root） |
 | `-p <yes \| no>` / `--allow-root-passwd` | 是否允许 root 用**密码**登录（只写入 `PermitRootLogin`，不改变密码认证本身；仅 root） |

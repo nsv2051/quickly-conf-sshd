@@ -66,6 +66,7 @@ if [ "$(has_param "-h" "--help")" == "true" ]; then
     echo "                                      If 'false' is specified, Crontab settings will be deleted."
     echo ""
     echo "  -o, --only-update-keys            Only update SSH keys, do not configure ssh server."
+    echo "  --audit                           Read-only audit: check install / cron / managed block / key counts; changes nothing; exit code 1 on anomalies."
     echo "  -u, --update-self                 Update this script to the latest version."
     echo "  --uninstall                       Uninstall this script (remove cron and local files)."
     echo ""
@@ -75,6 +76,138 @@ if [ "$(has_param "-h" "--help")" == "true" ]; then
     echo "  -P, --disable-password-auth <yes | no>  Disable password authentication entirely (仅密钥登录; 写 sshd_config.d drop-in 并 reload sshd)."
     echo ""
     exit 0
+fi
+
+# 只读审计：检查本机安装状态，不创建/修改/移动/删除任何文件，不联网。
+audit_conf_sshd() {
+    local target_script="$HOME/.conf-sshd/conf-sshd.sh"
+    local auth_file="$HOME/.ssh/authorized_keys"
+    local log_file="$HOME/.conf-sshd/run.log"
+    local begin_marker="# --- BEGIN MANAGED BY CONF-SSHD SCRIPT ---"
+    local end_marker="# --- END MANAGED BY CONF-SSHD SCRIPT ---"
+
+    # inst: 本体脚本是否已安装
+    local inst="no"
+    local inst_text="未安装"
+    if [ -f "$target_script" ]; then
+        inst="yes"
+        inst_text="已安装"
+    fi
+
+    # cron: crontab 中的自动更新条目
+    local cron_state="MISSING"
+    local cron_text="未配置"
+    if ! command -v crontab >/dev/null 2>&1; then
+        cron_state="NO_CRONTAB"
+        cron_text="未找到 crontab 命令"
+    else
+        local cron_lines=""
+        cron_lines=$(crontab -l 2>/dev/null || true)
+        local cron_hit=""
+        cron_hit=$(printf '%s\n' "$cron_lines" | { grep -F "/.conf-sshd/conf-sshd.sh" || true; })
+        if [ -z "$cron_hit" ]; then
+            cron_state="MISSING"
+            cron_text="未配置"
+        else
+            case "$cron_hit" in
+                *'"/bin/bash /'*|*'"bash /'*|*'"/bin/sh /'*)
+                    cron_state="BROKEN_QUOTES"
+                    cron_text="引号包住了整条命令"
+                    ;;
+                *)
+                    cron_state="OK"
+                    cron_text="正常"
+                    ;;
+            esac
+        fi
+    fi
+
+    # block: authorized_keys 中受管块的状态与块内外公钥数量
+    local block_state="NO_FILE"
+    local block_text="authorized_keys 不存在"
+    local in_count=0
+    local out_count=0
+    local total_count=0
+    if [ -f "$auth_file" ]; then
+        local begin_count=0
+        local end_count=0
+        local inside=false
+        local line=""
+        while IFS= read -r line || [ -n "$line" ]; do
+            if [ "$line" == "$begin_marker" ]; then
+                begin_count=$((begin_count + 1))
+                inside=true
+                continue
+            fi
+            if [ "$line" == "$end_marker" ]; then
+                end_count=$((end_count + 1))
+                inside=false
+                continue
+            fi
+            case "$line" in
+                ''|'#'*) continue ;;
+            esac
+            if [ "$inside" == "true" ]; then
+                in_count=$((in_count + 1))
+            else
+                out_count=$((out_count + 1))
+            fi
+        done < "$auth_file"
+
+        if [ "$begin_count" -eq 0 ] && [ "$end_count" -eq 0 ]; then
+            block_state="ABSENT"
+            block_text="没有受管块标记"
+        elif [ "$begin_count" -eq "$end_count" ] && [ "$begin_count" -gt 0 ]; then
+            block_state="PAIRED"
+            block_text="受管块标记成对"
+        else
+            block_state="UNPAIRED"
+            block_text="受管块标记不成对"
+        fi
+    fi
+    total_count=$((in_count + out_count))
+
+    # last: run.log 中最后一条成功更新时间
+    local last="none"
+    if [ -f "$log_file" ]; then
+        local last_line=""
+        last_line=$(grep -F "SSH public key updated successfully" "$log_file" 2>/dev/null | tail -n 1 || true)
+        if [ -n "$last_line" ]; then
+            last="${last_line##* at }"
+        fi
+    fi
+
+    echo "[审计] 本体脚本: $inst_text (inst=$inst)"
+    echo "[AUDIT] Installed script: $inst"
+    echo "[审计] Crontab: $cron_text (cron=$cron_state)"
+    echo "[AUDIT] Crontab: $cron_state"
+    echo "[审计] 受管块: $block_text (block=$block_state)"
+    echo "[AUDIT] Managed block: $block_state"
+    echo "[审计] 受管块内公钥: $in_count"
+    echo "[AUDIT] Keys inside managed block: $in_count"
+    echo "[审计] 受管块外公钥: $out_count"
+    echo "[AUDIT] Keys outside managed block: $out_count"
+    echo "[审计] 公钥总数: $total_count"
+    echo "[AUDIT] Total keys: $total_count"
+    echo "[审计] 最近成功更新时间: $last"
+    echo "[AUDIT] Last successful update: $last"
+
+    printf 'AUDIT|inst=%s|cron=%s|block=%s|in=%s|out=%s|total=%s|last=%s\n' \
+        "$inst" "$cron_state" "$block_state" "$in_count" "$out_count" "$total_count" "$last"
+
+    if [ "$inst" != "yes" ] || [ "$cron_state" != "OK" ] || [ "$block_state" != "PAIRED" ] || [ "$in_count" -eq 0 ]; then
+        return 1
+    fi
+    return 0
+}
+
+# 严格只读审计分支，必须早于任何写操作（如 trim_run_log）。
+if [ "$(has_param "--audit")" == "true" ]; then
+    if audit_conf_sshd; then
+        exit 0
+    else
+        exit 1
+    fi
 fi
 
 # reload sshd (reload 不会断开现有连接, 比 restart 安全)
