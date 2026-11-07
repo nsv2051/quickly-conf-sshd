@@ -6,7 +6,7 @@ set -o pipefail
 
 # 默认获取 SSH key 的地方，一般是 Github.
 sshkey_url="{{ SSH_KEY_URL }}"
-# 默认的 Cron 执行计划, 每天凌晨 0 点执行
+# 默认的 Cron 执行计划, 每小时第 17 分钟执行（可用 CRON_EXPRESSION / -c 覆盖）
 default_cron="{{ DEFAULT_CRON }}"
 # 脚本 Url
 script_url="{{ SCRIPT_URL }}"

@@ -16,31 +16,31 @@
 部署公钥并注册定期自动更新：
 
 ```bash
-curl -s https://YOUR_WORKER_URL | bash -s -- -c
+curl -fsSL https://YOUR_WORKER_URL | bash -s -- -c
 ```
 
 只部署公钥、不注册自动更新（去掉 `-c`）：
 
 ```bash
-curl -s https://YOUR_WORKER_URL | bash -s
+curl -fsSL https://YOUR_WORKER_URL | bash -s
 ```
 
 跳过 SSH Server 检查，只更新公钥：
 
 ```bash
-curl -s https://YOUR_WORKER_URL | bash -s -- -o
+curl -fsSL https://YOUR_WORKER_URL | bash -s -- -o
 ```
 
 关闭密码登录，改为仅密钥登录（需 `root`）：
 
 ```bash
-curl -s https://YOUR_WORKER_URL | bash -s -- -P yes
+curl -fsSL https://YOUR_WORKER_URL | bash -s -- -P yes
 ```
 
 查看帮助：
 
 ```bash
-curl -s https://YOUR_WORKER_URL | bash -s -- -h
+curl -fsSL https://YOUR_WORKER_URL | bash -s -- -h
 ```
 
 > 执行 `-P yes` 前，请先用密钥新开一个会话确认可以登录，否则关闭密码登录后将失去远程访问；脚本会自动备份、校验并 reload sshd（不会断开现有连接）。
@@ -65,7 +65,7 @@ curl -s https://YOUR_WORKER_URL | bash -s -- -h
 
 | 地址 | 说明 |
 | --- | --- |
-| `/keys` | 全部公钥（按来源顺序合并，取第一个可用来源） |
+| `/keys` | 当前公钥（按优先级 GitHub → SSH_KEY_URLS → BACKUP_SSH_KEYS，返回第一个可用来源） |
 | `/keys/github` | 指定 GitHub 账号的公钥 |
 | `/keys/extra` | 额外来源（`SSH_KEY_URLS`） |
 | `/keys/backup` | 内联备用公钥（`BACKUP_SSH_KEYS`） |
@@ -81,7 +81,7 @@ curl -s https://YOUR_WORKER_URL | bash -s -- -h
 | 变量名 | 必填 | 作用 | 默认值 |
 | --- | --- | --- | --- |
 | `GITHUB_USER_NAME` | 是* | 分发哪个 GitHub 账号的公钥（决定 `/keys` 首选来源） | 无 |
-| `CRON_EXPRESSION` | 否 | 脚本中 `-c` 的默认 cron 计划 | `0 0 * * *` |
+| `CRON_EXPRESSION` | 否 | 脚本中 `-c` 的默认 cron 计划 | `17 * * * *` |
 | `BACKUP_SSH_KEYS` | 否 | 内联备用公钥（各变量可为单行一把公钥） | 空 |
 | `SSH_KEY_URLS` | 否 | 额外公钥来源（换行或英文逗号分隔，例如 Keybase） | 空 |
 

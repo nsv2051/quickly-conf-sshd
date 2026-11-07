@@ -2,7 +2,7 @@ export const landing = {
   // 页面语言与元信息
   lang: "zh-Hans",
   appTitle: "SSH 公钥一键部署",
-  description: "一条命令把 GitHub 上的 SSH 公钥部署到服务器，并保持每小时自动更新。",
+  description: "一条命令把 SSH 公钥部署到服务器，并保持每小时自动更新。",
 
   // 页头
   brandName: "Conf SSHD",
@@ -18,25 +18,25 @@ export const landing = {
     {
       label: "部署 + 自动更新",
       tag: "推荐",
-      cmd: "curl -s {{BASE_URL}} | bash -s -- -c",
+      cmd: "curl -fsSL {{BASE_URL}} | bash -s -- -c",
       hint: "部署公钥并注册自动更新。"
     },
     {
       label: "仅更新密钥",
       tag: "",
-      cmd: "curl -s {{BASE_URL}} | bash -s -- -o",
+      cmd: "curl -fsSL {{BASE_URL}} | bash -s -- -o",
       hint: "只同步公钥，不改动 SSH 配置。"
     },
     {
       label: "仅密钥登录",
       tag: "",
-      cmd: "curl -s {{BASE_URL}} | bash -s -- -P yes",
+      cmd: "curl -fsSL {{BASE_URL}} | bash -s -- -P yes",
       hint: "关闭密码登录。先用密钥验证能登录。"
     },
     {
       label: "查看帮助",
       tag: "",
-      cmd: "curl -s {{BASE_URL}} | bash -s -- -h",
+      cmd: "curl -fsSL {{BASE_URL}} | bash -s -- -h",
       hint: "查看全部参数。"
     }
   ],
@@ -51,7 +51,7 @@ export const landing = {
   features: [
     {
       title: "每小时自动更新",
-      body: "改 GitHub 公钥即可同步到所有服务器。"
+      body: "改任一处公钥即可同步到所有服务器；支持 GitHub、额外来源与内联备用三层回退。"
     },
     {
       title: "只写受管块，可回滚",
@@ -81,10 +81,12 @@ export const landing = {
   ],
   // 查看密钥与脚本：默认展示第一项（GitHub 公钥）
   viewTitle: "接口地址",
-  viewLede: "以下地址均为纯文本接口，浏览器可直接打开，或点「复制地址」取用。",
+  viewLede: "以下地址均为纯文本接口，浏览器可直接打开，或点「复制地址」取用。`/keys` 按优先级依次尝试 GitHub → 额外来源 → 内联备用，返回第一个可用的那份公钥。",
   views: [
     { label: "GitHub 公钥", url: "{{BASE_URL}}/keys/github" },
-    { label: "全部公钥", url: "{{BASE_URL}}/keys" },
+    { label: "当前公钥", url: "{{BASE_URL}}/keys" },
+    { label: "额外来源", url: "{{BASE_URL}}/keys/extra" },
+    { label: "内联备用", url: "{{BASE_URL}}/keys/backup" },
     { label: "安装脚本", url: "{{BASE_URL}}/sh" }
   ],
   viewCopyLinkLabel: "复制地址"
@@ -122,7 +124,7 @@ export function renderLandingPage(baseUrl, landing) {
   ).join("\n");
 
   const footer = landing.footerLines.map((l) =>
-    `    <div>${esc(fillBaseUrl(l, baseUrl))}</div>`
+    `    <div>${rich(fillBaseUrl(l, baseUrl))}</div>`
   ).join("\n");
 
   const urlRows = landing.views.map((v) => {
@@ -311,7 +313,7 @@ ${notice}
 
   <section class="view">
     <h2>${esc(landing.viewTitle)}</h2>
-    <p class="lede">${esc(landing.viewLede)}</p>
+    <p class="lede">${rich(landing.viewLede)}</p>
     <ul class="urls">
 ${urlRows}
     </ul>
