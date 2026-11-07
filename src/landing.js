@@ -51,7 +51,7 @@ export const landing = {
   features: [
     {
       title: "每小时自动更新",
-      body: "改任一处公钥即可同步到所有服务器；支持 GitHub、额外来源与内联备用三层回退。"
+      body: "改任一处公钥即可同步到所有服务器；多个来源自动回退，返回第一份可用的公钥。"
     },
     {
       title: "只写受管块，可回滚",
@@ -79,14 +79,11 @@ export const landing = {
   footerLines: [
     "浏览器访问显示本页；\`curl\` / \`wget\` 访问返回安装脚本。"
   ],
-  // 查看密钥与脚本：默认展示第一项（GitHub 公钥）
+  // 查看密钥与脚本：默认展示第一项（当前公钥）
   viewTitle: "接口地址",
-  viewLede: "以下地址均为纯文本接口，浏览器可直接打开，或点「复制地址」取用。`/keys` 按优先级依次尝试 GitHub → 额外来源 → 内联备用，返回第一个可用的那份公钥。",
+  viewLede: "以下地址均为纯文本接口，浏览器可直接打开，或点「复制地址」取用。",
   views: [
-    { label: "GitHub 公钥", url: "{{BASE_URL}}/keys/github" },
     { label: "当前公钥", url: "{{BASE_URL}}/keys" },
-    { label: "额外来源", url: "{{BASE_URL}}/keys/extra" },
-    { label: "内联备用", url: "{{BASE_URL}}/keys/backup" },
     { label: "安装脚本", url: "{{BASE_URL}}/sh" }
   ],
   viewCopyLinkLabel: "复制地址"
@@ -142,6 +139,7 @@ export function renderLandingPage(baseUrl, landing) {
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="light dark">
 <meta name="description" content="${esc(landing.description)}">
+<meta name="robots" content="noindex,nofollow">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect x='1' y='1' width='30' height='30' rx='8' fill='%230071e3'/%3E%3Cpath d='M9.5 11.5l4 4.5-4 4.5' fill='none' stroke='%23fff' stroke-width='2.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3Cpath d='M16.5 20.5h6' fill='none' stroke='%23fff' stroke-width='2.6' stroke-linecap='round'/%3E%3C/svg%3E">
 <title>${esc(landing.appTitle)}</title>
 <style>

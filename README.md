@@ -74,6 +74,10 @@ curl -fsSL https://YOUR_WORKER_URL | bash -s -- -h
 
 > 旧地址 `/ssh.keys`、`/ssh.keys/github`、`/ssh.keys/extra`、`/ssh.keys/backup`、`/script.sh` 仍可用（作为短路径的别名），以兼容已部署服务器上的旧引用。
 
+### 接口清单（运维用，不在落地页展示）
+
+`/keys/github`、`/keys/extra`、`/keys/backup` 仍然可用（上表完整保留），但为降低暴露面已从落地页移除；落地页只展示 `/keys` 与 `/sh`，需要时可直接访问这些地址。
+
 ## 配置
 
 所有配置项均通过环境变量设置，在 **Cloudflare 面板 → 该 Worker → Settings → Variables and Secrets** 添加，代码里统一用 `env.<变量名>` 读取。

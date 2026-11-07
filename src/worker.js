@@ -7,6 +7,12 @@ const SCRIPT_PH_SSH_KEY_URL = "{{ SSH_KEY_URL }}"
 const SCRIPT_PH_SCRIPT_URL = "{{ SCRIPT_URL }}"
 const SCRIPT_PH_DEFAULT_CRON = "{{ DEFAULT_CRON }}"
 
+// 所有响应统一附加的反索引头，避免公钥接口被搜索引擎收录。
+const BASE_HEADERS = {
+  "x-robots-tag": "noindex, nofollow",
+  "cache-control": "no-store"
+};
+
 // 短路径为主；下表把旧路径映射为短路径，兼容已部署脚本中固化的旧地址。
 const PATH_ALIASES = {
   "/ssh.keys": "/keys",
@@ -47,7 +53,7 @@ async function sendScriptContent(baseUrl, config) {
   return new Response(scriptContent, {
     headers: {
       "content-type": "text/plain; charset=utf-8",
-      "cache-control": "no-store"
+      ...BASE_HEADERS
     }
   });
 }
@@ -69,7 +75,7 @@ export default {
             statusText: "No SSH key source configured",
             headers: {
               "content-type": "text/plain; charset=utf-8",
-              "cache-control": "no-store"
+              ...BASE_HEADERS
             }
           }
         );
@@ -80,7 +86,7 @@ export default {
           return new Response(keys, {
             headers: {
               "content-type": "text/plain; charset=utf-8",
-              "cache-control": "no-store"
+              ...BASE_HEADERS
             }
           });
         }
@@ -89,7 +95,7 @@ export default {
         return new Response(config.backupSshKeys, {
           headers: {
             "content-type": "text/plain; charset=utf-8",
-            "cache-control": "no-store"
+            ...BASE_HEADERS
           }
         });
       } else {
@@ -98,7 +104,7 @@ export default {
           statusText: "Failed to get keys",
           headers: {
             "content-type": "text/plain; charset=utf-8",
-            "cache-control": "no-store"
+            ...BASE_HEADERS
           }
         });
       }
@@ -109,7 +115,7 @@ export default {
           statusText: "Not Found",
           headers: {
             "content-type": "text/plain; charset=utf-8",
-            "cache-control": "no-store"
+            ...BASE_HEADERS
           }
         });
       }
@@ -120,14 +126,14 @@ export default {
           statusText: "Not Found",
           headers: {
             "content-type": "text/plain; charset=utf-8",
-            "cache-control": "no-store"
+            ...BASE_HEADERS
           }
         });
       }
       return new Response(keys, {
         headers: {
           "content-type": "text/plain; charset=utf-8",
-          "cache-control": "no-store"
+          ...BASE_HEADERS
         }
       });
     } else if (route === "/keys/extra") {
@@ -137,7 +143,7 @@ export default {
           statusText: "Not Found",
           headers: {
             "content-type": "text/plain; charset=utf-8",
-            "cache-control": "no-store"
+            ...BASE_HEADERS
           }
         });
       }
@@ -147,7 +153,7 @@ export default {
           return new Response(keys, {
             headers: {
               "content-type": "text/plain; charset=utf-8",
-              "cache-control": "no-store"
+              ...BASE_HEADERS
             }
           });
         }
@@ -157,7 +163,7 @@ export default {
         statusText: "Bad Gateway",
         headers: {
           "content-type": "text/plain; charset=utf-8",
-          "cache-control": "no-store"
+          ...BASE_HEADERS
         }
       });
     } else if (route === "/keys/backup") {
@@ -167,14 +173,14 @@ export default {
           statusText: "Not Found",
           headers: {
             "content-type": "text/plain; charset=utf-8",
-            "cache-control": "no-store"
+            ...BASE_HEADERS
           }
         });
       }
       return new Response(config.backupSshKeys, {
         headers: {
           "content-type": "text/plain; charset=utf-8",
-          "cache-control": "no-store"
+          ...BASE_HEADERS
         }
       });
     } else if (route === "/") {
@@ -185,7 +191,7 @@ export default {
         return new Response(renderLandingPage(baseUrl, landing), {
           headers: {
             "content-type": "text/html; charset=utf-8",
-            "cache-control": "no-store"
+            ...BASE_HEADERS
           }
         });
       }
@@ -194,7 +200,11 @@ export default {
     } else {
       return new Response("Not found.", {
         status: 404,
-        statusText: "Not Found"
+        statusText: "Not Found",
+        headers: {
+          "content-type": "text/plain; charset=utf-8",
+          ...BASE_HEADERS
+        }
       })
     }
   }
